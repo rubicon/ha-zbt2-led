@@ -35,5 +35,5 @@ Chosen: off sends black, and after a Home Assistant or ZHA restart an off light 
 
 - Layer model: NabuCasa/silabs-firmware-builder at commit `bbbbf24`.
 - Adapter reset on connect: `bellows/ezsp/__init__.py:139-140` (`_startup_reset` calls `reset()` for serial ports; bellows 1.1.0).
-- Tests: `tests/test_light.py` (`test_restart_while_off_leaves_the_led_alone`, `test_zha_reload_while_off_leaves_the_led_alone`, `test_turning_off_an_off_light_after_restart_leaves_it_alone` and the always-black variants).
+- Tests: `tests/test_light.py` (`test_restart_while_off_leaves_the_led_alone`, `test_zha_reload_while_off_leaves_the_led_alone`, `test_turning_off_an_off_light_after_restart_leaves_it_alone` and the always-black variants), and `tests/test_init.py` (`test_zha_restart_while_unloaded_is_an_adapter_reset`).
 - Chosen by Dax Davis on 2026-11-14.

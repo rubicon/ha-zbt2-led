@@ -23,6 +23,7 @@ from collections.abc import Callable
 from importlib.metadata import PackageNotFoundError, version
 import struct
 from typing import Any
+import weakref
 
 from homeassistant.core import HomeAssistant
 
@@ -57,6 +58,9 @@ class LedNotSupported(LedLinkError):
 
 class LedCommandFailed(LedLinkError):
     """The adapter did not accept a frame."""
+
+
+type ZhaRun = Callable[[], object | None]
 
 
 def installed_bellows_version() -> str | None:
@@ -96,8 +100,8 @@ def _ezsp(hass: HomeAssistant) -> Any:
     return _guarded("reaching ZHA's EZSP connection", lambda: _find_ezsp(hass))
 
 
-def _find_ezsp(hass: HomeAssistant) -> Any:
-    """Walk ZHA's internals to bellows' EZSP object, checking each step."""
+def _find_gateway(hass: HomeAssistant) -> Any:
+    """Return ZHA's running gateway."""
     try:
         from homeassistant.components.zha.helpers import (  # noqa: PLC0415
             get_zha_gateway,
@@ -106,10 +110,14 @@ def _find_ezsp(hass: HomeAssistant) -> Any:
         raise LinkIncompatible("ZHA no longer provides get_zha_gateway") from err
 
     try:
-        gateway = get_zha_gateway(hass)
+        return get_zha_gateway(hass)
     except ValueError as err:
         raise ZhaNotReady("ZHA has no gateway") from err
 
+
+def _find_ezsp(hass: HomeAssistant) -> Any:
+    """Walk ZHA's internals to bellows' EZSP object, checking each step."""
+    gateway = _find_gateway(hass)
     try:
         app = gateway.application_controller
     except AttributeError as err:
@@ -150,6 +158,23 @@ def _read_features(ezsp: Any) -> int:
             f"bellows' XNCP feature bits are not an integer: {features!r}"
         )
     return int(features)
+
+
+def zha_run(hass: HomeAssistant) -> ZhaRun:
+    """Return a weak reference to ZHA's gateway, which identifies the ZHA run.
+
+    ZHA builds a new gateway, and with it a new bellows connection that resets
+    the adapter, every time its config entry loads, including after a lost
+    serial connection. Comparing gateways therefore tells a ZHA restart apart
+    from a reload of this integration, even a restart this integration did not
+    see. If the gateway cannot be weakly referenced the reference is always
+    dead, so every ZHA start counts as a restart.
+    """
+    gateway = _guarded("reaching ZHA's gateway", lambda: _find_gateway(hass))
+    try:
+        return weakref.ref(gateway)
+    except TypeError:
+        return lambda: None
 
 
 def xncp_features(hass: HomeAssistant) -> int:

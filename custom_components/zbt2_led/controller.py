@@ -28,6 +28,7 @@ from .zha_link import (
     LedNotSupported,
     LinkIncompatible,
     ZhaNotReady,
+    ZhaRun,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -42,13 +43,13 @@ class LinkMemory:
     Only a ZHA start resets the adapter. Reloading this integration (saving
     options, re-enabling the entity) or re-adding the entity (an entity_id
     rename) does not, so the LED keeps what it shows and so does a problem the
-    adapter has not recovered from.
+    adapter has not recovered from. Removing the config entry forgets it all.
     """
 
     # Loop time the last frame started, so a reload cannot beat the rate cap.
     last_frame_start: float | None = None
-    # True once ZHA has been seen loaded and has not unloaded since.
-    zha_run_seen: bool = False
+    # The ZHA run the LED was last brought in step with.
+    zha_run: ZhaRun | None = None
     # True when the driver had a program when it last stopped: the LED shows
     # something this integration put there, not the adapter's status light.
     program_active: bool = False
@@ -142,24 +143,17 @@ class LedController:
         self.zha_loaded = loaded
         self.driver.pause()
         if loaded:
-            adapter_reset = not self._memory.zha_run_seen
-            self._memory.zha_run_seen = True
-            self._zha_started(adapter_reset)
-        else:
-            self._memory.zha_run_seen = False
+            self._zha_started()
         self._notify()
 
     @callback
-    def _zha_started(self, adapter_reset: bool) -> None:
-        """Check the link, then show whatever the light should show.
-
-        adapter_reset is True when ZHA has (re)started since this integration
-        last saw it loaded, which resets the adapter and its LED.
-        """
+    def _zha_started(self) -> None:
+        """Check the link, then show whatever the light should show."""
         if self._incompatible is not None:
             return
         try:
             supported = zha_link.led_control_supported(self.hass)
+            run = zha_link.zha_run(self.hass)
         except LinkIncompatible as err:
             self._raise(ISSUE_INCOMPATIBLE, str(err))
             return
@@ -172,6 +166,12 @@ class LedController:
             self._raise(ISSUE_NOT_SUPPORTED, "feature bit not set")
             return
         program = self._reassert()
+        previous = self._memory.zha_run
+        self._memory.zha_run = run
+        # A new ZHA run means bellows reconnected, which resets the adapter.
+        adapter_reset = (
+            previous is None or (gateway := previous()) is None or gateway is not run()
+        )
         if adapter_reset:
             # A fresh adapter: drop every earlier verdict and let the next
             # frame decide, so an off light is not left unavailable.
@@ -249,7 +249,8 @@ class LedController:
 
 
 @callback
-def async_delete_issues(hass: HomeAssistant) -> None:
-    """Remove every repair issue this integration raises."""
+def async_forget(hass: HomeAssistant) -> None:
+    """Remove every repair issue this integration raises, and its link memory."""
+    hass.data.pop(LINK_MEMORY, None)
     for issue_id in ISSUES:
         ir.async_delete_issue(hass, DOMAIN, issue_id)

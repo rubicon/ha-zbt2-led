@@ -10,7 +10,7 @@ from homeassistant.exceptions import ConfigEntryNotReady
 
 from . import zha_link
 from .const import CONF_SERIAL_NUMBER, DOMAIN, ZHA_DOMAIN
-from .controller import LedController, async_delete_issues
+from .controller import LedController, async_forget
 from .zha_link import LinkIncompatible
 
 PLATFORMS = [Platform.LIGHT]
@@ -60,5 +60,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: Zbt2LedConfigEntry) -> 
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: Zbt2LedConfigEntry) -> None:
-    """Remove the repair issues the entry raised."""
-    async_delete_issues(hass)
+    """Forget the entry's repair issues and what it knew about the LED."""
+    async_forget(hass)

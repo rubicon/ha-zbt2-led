@@ -460,3 +460,78 @@ async def test_reload_while_off_and_untouched_stays_hands_off(
 
     assert ncp.frames == []
     await unload(hass, config_entry)
+
+
+@pytest.mark.parametrize(
+    "zha_back_first", [True, False], ids=["zha-back-first", "zha-down-at-setup"]
+)
+async def test_zha_restart_while_unloaded_is_an_adapter_reset(
+    hass: HomeAssistant,
+    config_entry: MockConfigEntry,
+    zha_running: MockConfigEntry,
+    ncp: FakeZbt2Ncp,
+    zha_back_first: bool,
+) -> None:
+    """A ZHA restart this integration did not see still leaves an off LED alone."""
+    await setup_entry(hass, config_entry)
+    await turn_on_red(hass)
+    await hass.services.async_call(
+        LIGHT_DOMAIN, "turn_off", {ATTR_ENTITY_ID: ENTITY_ID}, blocking=True
+    )
+    await advance(hass, STEP)
+    assert ncp.colors == [RED, (0, 0, 0)]
+    await unload(hass, config_entry)
+
+    stop_zha(hass, zha_running)
+    fresh = FakeZbt2Ncp()
+    if zha_back_first:
+        start_zha(hass, zha_running, fresh)
+        await setup_entry(hass, config_entry)
+    else:
+        await setup_entry(hass, config_entry)
+        start_zha(hass, zha_running, fresh)
+    await advance(hass, STEP)
+
+    assert fresh.frames == []
+    assert hass.states.get(ENTITY_ID).state == STATE_OFF
+    await unload(hass, config_entry)
+
+
+async def test_removed_entry_leaves_nothing_behind(
+    hass: HomeAssistant,
+    config_entry: MockConfigEntry,
+    zha_running: MockConfigEntry,
+    ncp: FakeZbt2Ncp,
+) -> None:
+    """A removed entry's repair and LED state do not carry over to a new entry."""
+    await setup_entry(hass, config_entry)
+    await turn_on_red(hass)
+    ncp.ezsp_status = EmberStatus.ERR_FATAL
+    await hass.services.async_call(
+        LIGHT_DOMAIN, "turn_off", {ATTR_ENTITY_ID: ENTITY_ID}, blocking=True
+    )
+    for _ in range(FAILURES_BEFORE_REPAIR):
+        await advance(hass, RETRY_INTERVAL + SLACK)
+    assert hass.states.get(ENTITY_ID).state == STATE_UNAVAILABLE
+
+    assert await hass.config_entries.async_remove(config_entry.entry_id)
+    await hass.async_block_till_done()
+    ncp.ezsp_status = EmberStatus.SUCCESS
+    ncp.frames.clear()
+
+    new_entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="ZBT-2 LED",
+        unique_id=config_entry.unique_id,
+        data=dict(config_entry.data),
+        options=dict(config_entry.options),
+    )
+    new_entry.add_to_hass(hass)
+    await setup_entry(hass, new_entry)
+    assert hass.states.get(ENTITY_ID).state == STATE_OFF
+    await advance(hass, STEP)
+
+    assert hass.states.get(ENTITY_ID).state == STATE_OFF
+    assert ir.async_get(hass).issues == {}
+    assert ncp.frames == []
+    await unload(hass, new_entry)

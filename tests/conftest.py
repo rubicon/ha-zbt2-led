@@ -96,11 +96,21 @@ def zha_entry(hass: HomeAssistant) -> MockConfigEntry:
     return entry
 
 
+class FakeGateway:
+    """ZHA's gateway as the integration sees it; ZHA builds a new one per start."""
+
+    def __init__(self, ezsp: object) -> None:
+        """Wrap ezsp the way ZHA's gateway and zigpy's application do."""
+        self.application_controller = SimpleNamespace(_ezsp=ezsp)
+
+
 def start_zha(hass: HomeAssistant, zha_entry: MockConfigEntry, ezsp: object) -> None:
-    """Make ZHA look loaded, with the given object as its EZSP connection."""
-    get_zha_data(hass).gateway_proxy = SimpleNamespace(
-        gateway=SimpleNamespace(application_controller=SimpleNamespace(_ezsp=ezsp))
-    )
+    """Make ZHA look loaded, with the given object as its EZSP connection.
+
+    Each call is a new ZHA run with a new gateway, as a real ZHA start is, even
+    when ezsp is the same firmware double.
+    """
+    get_zha_data(hass).gateway_proxy = SimpleNamespace(gateway=FakeGateway(ezsp))
     zha_entry.mock_state(hass, ConfigEntryState.LOADED)
 
 

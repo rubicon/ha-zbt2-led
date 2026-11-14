@@ -380,3 +380,42 @@ async def test_unexpected_error_reading_feature_bits_is_incompatible(
 
     with pytest.raises(LinkIncompatible, match="features moved"):
         zha_link.led_control_supported(hass)
+
+
+async def test_zha_run_identifies_each_zha_start(
+    hass: HomeAssistant, zha_entry: MockConfigEntry, ncp: FakeZbt2Ncp
+) -> None:
+    """The same run gives the same gateway; a ZHA restart gives a new one."""
+    start_zha(hass, zha_entry, ncp)
+    first = zha_link.zha_run(hass)
+
+    assert first() is not None
+    assert zha_link.zha_run(hass)() is first()
+
+    start_zha(hass, zha_entry, ncp)
+
+    assert zha_link.zha_run(hass)() is not first()
+
+
+async def test_zha_run_without_weak_references_is_always_new(
+    hass: HomeAssistant, ncp: FakeZbt2Ncp
+) -> None:
+    """A gateway that cannot be weakly referenced makes every start count as new."""
+
+    class SlottedGateway:
+        __slots__ = ("application_controller",)
+
+        def __init__(self) -> None:
+            self.application_controller = SimpleNamespace(_ezsp=ncp)
+
+    zha_helpers.get_zha_data(hass).gateway_proxy = SimpleNamespace(
+        gateway=SlottedGateway()
+    )
+
+    assert zha_link.zha_run(hass)() is None
+
+
+async def test_zha_run_without_gateway_is_not_ready(hass: HomeAssistant) -> None:
+    """Before ZHA has a gateway there is no run to identify."""
+    with pytest.raises(ZhaNotReady):
+        zha_link.zha_run(hass)
