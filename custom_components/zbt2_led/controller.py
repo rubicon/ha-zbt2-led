@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 import logging
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
@@ -20,7 +21,7 @@ from .const import (
     ISSUE_NOT_SUPPORTED,
 )
 from .driver import LedDriver
-from .effects import RGB, Program
+from .effects import RGB, Program, off_program
 from .zha_link import (
     LedCommandFailed,
     LedLinkError,
@@ -33,9 +34,29 @@ _LOGGER = logging.getLogger(__name__)
 
 ISSUES = (ISSUE_INCOMPATIBLE, ISSUE_NOT_SUPPORTED, ISSUE_COMMAND_FAILED)
 
-# Loop time the last frame started, kept across reloads of the config entry so
-# a reload (saving options, for one) cannot send faster than the rate cap.
-LAST_FRAME_START: HassKey[float] = HassKey(f"{DOMAIN}_last_frame_start")
+
+@dataclass
+class LinkMemory:
+    """What outlives a reload of this config entry, for one ZHA run.
+
+    Only a ZHA start resets the adapter. Reloading this integration (saving
+    options, re-enabling the entity) or re-adding the entity (an entity_id
+    rename) does not, so the LED keeps what it shows and so does a problem the
+    adapter has not recovered from.
+    """
+
+    # Loop time the last frame started, so a reload cannot beat the rate cap.
+    last_frame_start: float | None = None
+    # True once ZHA has been seen loaded and has not unloaded since.
+    zha_run_seen: bool = False
+    # True when the driver had a program when it last stopped: the LED shows
+    # something this integration put there, not the adapter's status light.
+    program_active: bool = False
+    # The repair issue standing when the driver last stopped.
+    problem: str | None = None
+
+
+LINK_MEMORY: HassKey[LinkMemory] = HassKey(f"{DOMAIN}_link_memory")
 
 type ReassertFn = Callable[[], Program | None]
 
@@ -54,16 +75,17 @@ class LedController:
         self.hass = hass
         self.entry = entry
         self.zha_entry = zha_entry
+        self._memory = hass.data.setdefault(LINK_MEMORY, LinkMemory())
         self.driver = LedDriver(
             hass,
             self._send,
             self._on_success,
             self._on_error,
-            last_start=hass.data.get(LAST_FRAME_START),
+            last_start=self._memory.last_frame_start,
         )
         self.driver.pause()
         self.zha_loaded = False
-        self.problem: str | None = None
+        self.problem: str | None = self._memory.problem
         self._incompatible = incompatible
         self._reassert: ReassertFn = lambda: None
         self._listeners: list[CALLBACK_TYPE] = []
@@ -90,9 +112,10 @@ class LedController:
 
     @callback
     def async_stop(self) -> None:
-        """Stop sending for good, remembering when the last frame went out."""
-        if (last_start := self.driver.last_start) is not None:
-            self.hass.data[LAST_FRAME_START] = last_start
+        """Stop sending for good, remembering what a reload must carry on."""
+        self._memory.last_frame_start = self.driver.last_start
+        self._memory.program_active = self.driver.has_program
+        self._memory.problem = self.problem
         self.driver.stop()
 
     @property
@@ -119,12 +142,20 @@ class LedController:
         self.zha_loaded = loaded
         self.driver.pause()
         if loaded:
-            self._zha_started()
+            adapter_reset = not self._memory.zha_run_seen
+            self._memory.zha_run_seen = True
+            self._zha_started(adapter_reset)
+        else:
+            self._memory.zha_run_seen = False
         self._notify()
 
     @callback
-    def _zha_started(self) -> None:
-        """Check the link, then show whatever the light should show."""
+    def _zha_started(self, adapter_reset: bool) -> None:
+        """Check the link, then show whatever the light should show.
+
+        adapter_reset is True when ZHA has (re)started since this integration
+        last saw it loaded, which resets the adapter and its LED.
+        """
         if self._incompatible is not None:
             return
         try:
@@ -140,10 +171,20 @@ class LedController:
         if not supported:
             self._raise(ISSUE_NOT_SUPPORTED, "feature bit not set")
             return
-        # A fresh ZHA start is a fresh adapter: drop every earlier verdict and
-        # let the next frame decide, so an off light is not left unavailable.
-        self._clear(*ISSUES)
-        if (program := self._reassert()) is None:
+        program = self._reassert()
+        if adapter_reset:
+            # A fresh adapter: drop every earlier verdict and let the next
+            # frame decide, so an off light is not left unavailable.
+            self._clear(*ISSUES)
+        else:
+            # Same adapter as before our reload or re-add: it still shows what
+            # we last sent, and a frame that had not landed must still go out.
+            self._clear(ISSUE_INCOMPATIBLE, ISSUE_NOT_SUPPORTED)
+            if program is None and (
+                self.driver.has_program or self._memory.program_active
+            ):
+                program = off_program()
+        if program is None:
             self.driver.clear()
         else:
             self.driver.play(program)

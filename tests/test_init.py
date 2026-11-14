@@ -403,3 +403,60 @@ async def test_reload_keeps_the_rate_cap(
 
     await advance(hass, STEP)
     assert ncp.colors == [RED, RED]
+
+
+@pytest.mark.usefixtures("zha_running")
+async def test_reload_keeps_a_pending_black_frame(
+    hass: HomeAssistant, loaded_entry: MockConfigEntry, ncp: FakeZbt2Ncp
+) -> None:
+    """A reload is not an adapter reset: black still goes out after turn_off."""
+    await turn_on_red(hass)
+    await hass.services.async_call(
+        LIGHT_DOMAIN, "turn_off", {ATTR_ENTITY_ID: ENTITY_ID}, blocking=True
+    )
+    assert await hass.config_entries.async_reload(loaded_entry.entry_id)
+    await hass.async_block_till_done()
+    await advance(hass, STEP)
+
+    assert ncp.colors == [RED, (0, 0, 0)]
+    assert hass.states.get(ENTITY_ID).state == STATE_OFF
+
+
+@pytest.mark.usefixtures("zha_running")
+async def test_reload_keeps_the_not_responding_repair(
+    hass: HomeAssistant, loaded_entry: MockConfigEntry, ncp: FakeZbt2Ncp
+) -> None:
+    """A reload does not hide a repair the adapter has not recovered from."""
+    ncp.ezsp_status = EmberStatus.ERR_FATAL
+    await turn_on_red(hass)
+    for _ in range(FAILURES_BEFORE_REPAIR - 1):
+        await advance(hass, RETRY_INTERVAL + SLACK)
+    assert issue(hass, ISSUE_COMMAND_FAILED) is not None
+
+    assert await hass.config_entries.async_reload(loaded_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert issue(hass, ISSUE_COMMAND_FAILED) is not None
+    assert hass.states.get(ENTITY_ID).state == STATE_UNAVAILABLE
+
+    ncp.ezsp_status = EmberStatus.SUCCESS
+    await advance(hass, STEP)
+
+    assert issue(hass, ISSUE_COMMAND_FAILED) is None
+    assert ncp.last_color == RED
+
+
+async def test_reload_while_off_and_untouched_stays_hands_off(
+    hass: HomeAssistant,
+    config_entry: MockConfigEntry,
+    zha_running: MockConfigEntry,
+    ncp: FakeZbt2Ncp,
+) -> None:
+    """Reloading after a restart, before the light is used, sends nothing."""
+    await setup_entry(hass, config_entry)
+    assert await hass.config_entries.async_reload(config_entry.entry_id)
+    await hass.async_block_till_done()
+    await advance(hass, STEP)
+
+    assert ncp.frames == []
+    await unload(hass, config_entry)

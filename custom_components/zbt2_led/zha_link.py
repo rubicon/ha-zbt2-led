@@ -19,6 +19,7 @@ on the event loop.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from importlib.metadata import PackageNotFoundError, version
 import struct
 from typing import Any
@@ -80,8 +81,23 @@ def check_bellows_version(bellows_version: str | None) -> None:
         )
 
 
+def _guarded[T](what: str, read: Callable[[], T]) -> T:
+    """Run read, turning any error that is not a LedLinkError into LinkIncompatible."""
+    try:
+        return read()
+    except LedLinkError:
+        raise
+    except Exception as err:  # noqa: BLE001 - internals may change in any way
+        raise LinkIncompatible(f"Unexpected error {what}: {err!r}") from err
+
+
 def _ezsp(hass: HomeAssistant) -> Any:
     """Return bellows' EZSP object from the running ZHA gateway."""
+    return _guarded("reaching ZHA's EZSP connection", lambda: _find_ezsp(hass))
+
+
+def _find_ezsp(hass: HomeAssistant) -> Any:
+    """Walk ZHA's internals to bellows' EZSP object, checking each step."""
     try:
         from homeassistant.components.zha.helpers import (  # noqa: PLC0415
             get_zha_gateway,
@@ -93,8 +109,6 @@ def _ezsp(hass: HomeAssistant) -> Any:
         gateway = get_zha_gateway(hass)
     except ValueError as err:
         raise ZhaNotReady("ZHA has no gateway") from err
-    except Exception as err:  # noqa: BLE001 - any other failure is a ZHA change
-        raise LinkIncompatible(f"ZHA's get_zha_gateway failed: {err!r}") from err
 
     try:
         app = gateway.application_controller
@@ -120,6 +134,11 @@ def _ezsp(hass: HomeAssistant) -> Any:
 
 def _features(ezsp: Any) -> int:
     """Return the feature bits bellows stored, checking they still look right."""
+    return _guarded("reading bellows' feature bits", lambda: _read_features(ezsp))
+
+
+def _read_features(ezsp: Any) -> int:
+    """Read bellows' stored feature bits."""
     try:
         features = ezsp._xncp_features  # noqa: SLF001
     except AttributeError as err:

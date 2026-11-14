@@ -36,6 +36,7 @@
 - The driver starts paused. It resumes only when ZHA's config entry reaches `LOADED`, and pauses on every other state.
 - When ZHA loads, the controller checks the link, then asks the entity what to show. An off light under the default idle behaviour returns nothing, so the driver clears its program and leaves the status light alone. ADR 0002 records why.
 - A ZHA reload resets the adapter, so the same path re-asserts the light after it.
+- Reloading this integration (saving options) or re-adding the entity (an entity_id rename) does not reset the adapter. `LinkMemory` in `hass.data` carries the last frame time, whether the LED shows something this integration sent, and any standing repair across those, so only a real ZHA start counts as a reset.
 
 ## Boundaries
 

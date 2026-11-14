@@ -445,3 +445,17 @@ async def test_renaming_the_entity_keeps_driving_the_led(
 
     assert ncp.last_color == GREEN
     assert hass.states.get("light.status_led").state == STATE_ON
+
+
+@pytest.mark.usefixtures("loaded_entry")
+async def test_renaming_an_off_light_keeps_a_pending_black_frame(
+    hass: HomeAssistant, entity_registry: er.EntityRegistry, ncp: FakeZbt2Ncp
+) -> None:
+    """A rename is not an adapter reset: turning off still ends dark."""
+    await turn_on(hass, **{ATTR_RGB_COLOR: RED})
+    await turn_off(hass)
+    entity_registry.async_update_entity(ENTITY_ID, new_entity_id="light.status_led")
+    await hass.async_block_till_done()
+    await advance(hass, STEP)
+
+    assert ncp.last_color == BLACK

@@ -344,3 +344,39 @@ async def test_bellows_request_type_without_sender_falls_back_to_raw(
     await zha_link.async_set_color(hass, (1, 2, 3))
 
     assert ncp.frames == [b"\x00\x0f\x00\x01\x02\x03"]
+
+
+async def test_unexpected_error_inside_zha_internals_is_incompatible(
+    hass: HomeAssistant,
+) -> None:
+    """Any surprise while walking ZHA's internals is incompatible, not a crash."""
+
+    class Gateway:
+        @property
+        def application_controller(self) -> None:
+            raise RuntimeError("controller moved")
+
+    zha_helpers.get_zha_data(hass).gateway_proxy = SimpleNamespace(gateway=Gateway())
+
+    with pytest.raises(LinkIncompatible, match="controller moved"):
+        zha_link.led_control_supported(hass)
+
+
+async def test_unexpected_error_reading_feature_bits_is_incompatible(
+    hass: HomeAssistant, zha_entry: MockConfigEntry
+) -> None:
+    """A feature-bit attribute that raises is incompatible, not a crash."""
+
+    class Ncp(FakeZbt2Ncp):
+        @property
+        def _xncp_features(self) -> int:  # type: ignore[override]
+            raise RuntimeError("features moved")
+
+        @_xncp_features.setter
+        def _xncp_features(self, value: int) -> None:
+            pass
+
+    start_zha(hass, zha_entry, Ncp())
+
+    with pytest.raises(LinkIncompatible, match="features moved"):
+        zha_link.led_control_supported(hass)
