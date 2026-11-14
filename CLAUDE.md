@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Agent instructions for `rubicon/ha-zbt2-led`, a Home Assistant custom integration (domain `zbt2_led`) for the Home Assistant Connect ZBT-2's RGB LED.
+Agent instructions for `rubicon/ha-zbt2-led`, a Home Assistant custom integration (domain `zbt2_led`) that exposes the Home Assistant Connect ZBT-2's RGB LED as `light.zbt2_led`.
 
 ## Repository rules
 
