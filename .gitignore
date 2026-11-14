@@ -1,0 +1,19 @@
+# Per-issue worktrees (see CLAUDE.md)
+worktrees/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+
+# OS and editor junk
+.DS_Store
+.idea/
+.vscode/
