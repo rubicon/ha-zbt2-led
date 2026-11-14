@@ -1,7 +1,14 @@
 # Test and lint toolchain. pytest-homeassistant-custom-component pins the
-# Home Assistant release the suite runs against; zha must match the version
-# that release's ZHA manifest requires.
+# Home Assistant release the suite runs against. The packages below it are the
+# requirements of ZHA and of the components ZHA depends on (usb,
+# homeassistant_hardware), at the versions that release's manifests require,
+# because the tests import ZHA's helpers.
 pytest-homeassistant-custom-component==0.13.375
+aiousbwatcher==1.1.2
+ha-silabs-firmware-client==0.3.0
+serialx==1.11.0
+universal-silabs-flasher==1.1.0
 zha==2.3.1
+zha-quirks==2.3.0
 ruff==0.17.5
 black==26.10.1

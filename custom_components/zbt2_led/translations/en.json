@@ -1,0 +1,84 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add the ZBT-2 LED",
+        "description": "Zigbee Home Automation is using the Home Assistant Connect ZBT-2 with serial number {serial_number}. Add its LED as a light?\n\nThis controls the LED through Zigbee Home Automation's own connection to the adapter, which relies on parts of Home Assistant that are not a public interface. An update can stop it working until this integration is updated; it then shows as unavailable with a repair, and Zigbee keeps working."
+      }
+    },
+    "error": {
+      "zha_not_loaded": "Zigbee Home Automation is not running. Start it, wait until it is loaded, then try again.",
+      "led_not_supported": "The ZBT-2's Zigbee firmware does not offer LED control. Update the adapter firmware, restart Zigbee Home Automation, then try again.",
+      "incompatible": "This version of Home Assistant or its Zigbee library is not one this integration supports. Check for an update to this integration."
+    },
+    "abort": {
+      "zha_not_set_up": "Set up Zigbee Home Automation on the ZBT-2 first.",
+      "no_zbt2": "Zigbee Home Automation is not using a Home Assistant Connect ZBT-2.",
+      "already_configured": "This ZBT-2's LED is already added."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "ZBT-2 LED options",
+        "sections": {
+          "brightness": {
+            "name": "Brightness",
+            "data": {
+              "max_brightness": "Maximum brightness"
+            },
+            "data_description": {
+              "max_brightness": "Caps how bright the LED gets, whatever brightness the light is set to. The light still reports the brightness it was set to."
+            }
+          },
+          "behavior": {
+            "name": "When the light is off",
+            "data": {
+              "idle_behavior": "After a restart"
+            },
+            "data_description": {
+              "idle_behavior": "What the LED shows after Home Assistant or Zigbee Home Automation restarts while the light is off."
+            }
+          }
+        }
+      }
+    }
+  },
+  "selector": {
+    "idle_behavior": {
+      "options": {
+        "hands_off": "Leave it alone, so the adapter's own status light works until the light is next used",
+        "black": "Always turn it dark"
+      }
+    }
+  },
+  "entity": {
+    "light": {
+      "led": {
+        "name": "LED"
+      }
+    }
+  },
+  "issues": {
+    "incompatible_zha": {
+      "title": "ZBT-2 LED cannot reach the adapter",
+      "description": "The ZBT-2 LED light is unavailable because Home Assistant's Zigbee internals are not shaped the way this integration expects: {error}\n\nZigbee keeps working. Check for an update to this integration; it relies on parts of Home Assistant that can change in any release."
+    },
+    "led_not_supported": {
+      "title": "ZBT-2 firmware has no LED control",
+      "description": "The ZBT-2 LED light is unavailable because the adapter's Zigbee firmware does not offer LED control ({error}).\n\nUpdate the ZBT-2 firmware, then restart Zigbee Home Automation."
+    },
+    "led_command_failed": {
+      "title": "ZBT-2 LED is not responding",
+      "description": "The adapter has rejected several LED commands in a row: {error}\n\nThe integration keeps retrying and clears this repair once a command gets through. If it persists, restart Zigbee Home Automation."
+    }
+  },
+  "exceptions": {
+    "unknown_effect": {
+      "message": "The ZBT-2 LED has no effect named {effect}."
+    },
+    "zha_not_set_up": {
+      "message": "Zigbee Home Automation is not set up for this ZBT-2."
+    }
+  }
+}

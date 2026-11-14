@@ -1,7 +1,10 @@
 {
   "domain": "zbt2_led",
   "name": "ZBT-2 LED",
+  "after_dependencies": ["zha"],
+  "categories": ["lighting.led_strips_controllers", "messaging_notifications"],
   "codeowners": ["@rubicon"],
+  "config_flow": true,
   "documentation": "https://github.com/rubicon/ha-zbt2-led",
   "integration_type": "device",
   "iot_class": "assumed_state",
