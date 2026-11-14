@@ -26,6 +26,8 @@ jobs:
     name: HACS validation
     runs-on: ubuntu-latest
     steps:
+      # The action runs the floating ghcr.io/hacs/action:main image, so this
+      # SHA pins the wrapper only, not the validator itself.
       - uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main 2026-06-08
         with:
           category: integration

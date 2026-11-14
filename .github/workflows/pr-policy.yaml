@@ -5,6 +5,9 @@ on:
     types: [opened, edited, synchronize, reopened]
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   branch-naming:
     name: Branch naming
@@ -44,5 +47,33 @@ jobs:
         run: |
           if ! printf '%s' "$PR_TITLE" | grep -qE '^(feat|fix|chore|docs|test|ci|refactor|build|perf|revert|style)(\([a-z0-9_.-]+\))?!?: .+'; then
             echo "PR title must start with a Conventional Commits type (feat, fix, chore, docs, test, ci, refactor, build, perf, revert, style), e.g. 'feat: add thing'." >&2
+            exit 1
+          fi
+
+  issue-link:
+    name: Issue link
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a closing issue reference in the PR body
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          HEAD_REF: ${{ github.head_ref }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          # Trusted-automation exemption, same scope as branch naming:
+          # Dependabot and release-please bodies carry a diff or changelog,
+          # not an issue reference.
+          if [ "$ACTOR" = "dependabot[bot]" ]; then
+            echo "Trusted automation ($ACTOR); issue-link exempt."
+            exit 0
+          fi
+          case "$HEAD_REF" in
+            dependabot/*|release-please--*)
+              echo "Trusted automation branch ($HEAD_REF); issue-link exempt."
+              exit 0
+              ;;
+          esac
+          if ! printf '%s' "$PR_BODY" | grep -qiE '(close[sd]?|fix(e[sd])?|resolve[sd]?) #[0-9]+'; then
+            echo "PR body must link its issue with closing syntax, e.g. 'Closes #12'." >&2
             exit 1
           fi

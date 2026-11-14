@@ -4,9 +4,10 @@ on:
   push:
     branches: [main]
 
+# Writes go through the rubicon-release-please App token, so the workflow's
+# own GITHUB_TOKEN only needs to read.
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   release-please:
