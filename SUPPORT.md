@@ -3,7 +3,7 @@
 ## Getting help
 
 - **Questions and usage help:** open a [GitHub issue](https://github.com/rubicon/ha-zbt2-led/issues) and add the `question` label.
-- **Bugs:** open a GitHub issue with steps to reproduce, your Home Assistant version, the integration version, the ZBT-2 firmware version, and the integration's diagnostics download if it loads.
+- **Bugs:** open a GitHub issue with steps to reproduce, your Home Assistant version, the integration version, and the ZBT-2 firmware version.
 - **Feature requests:** open a GitHub issue describing what you want the LED to do and why.
 - **Security vulnerabilities:** do not open a public issue. Follow [SECURITY.md](SECURITY.md).
 

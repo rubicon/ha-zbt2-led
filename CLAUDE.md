@@ -1,11 +1,11 @@
 # CLAUDE.md
 
-Agent instructions for `rubicon/ha-zbt2-led`, a Home Assistant custom integration (domain `zbt2_led`) that exposes the Home Assistant Connect ZBT-2's RGB LED as `light.zbt2_led`.
+Agent instructions for `rubicon/ha-zbt2-led`, a Home Assistant custom integration (domain `zbt2_led`) for the Home Assistant Connect ZBT-2's RGB LED.
 
 ## Repository rules
 
 - Every change starts with an issue, gets a `dev/<issue>-<slug>` branch in its own worktree under `worktrees/`, and merges through a squash PR whose body says `Closes #N`. CI enforces the branch name, the Conventional Commits PR title and every commit message.
-- Commits are signed. `main` requires signed commits, linear history and the CI checks listed in branch protection.
+- Commits are signed. Branch protection on `main` requires signed commits, linear history and the CI checks.
 - No AI-authorship trailers or "Generated with" lines in commits, PR bodies or files.
 - Releases are cut by release-please from `main`. Never bump `manifest.json`'s version by hand.
 
