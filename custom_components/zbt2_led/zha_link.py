@@ -93,6 +93,8 @@ def _ezsp(hass: HomeAssistant) -> Any:
         gateway = get_zha_gateway(hass)
     except ValueError as err:
         raise ZhaNotReady("ZHA has no gateway") from err
+    except Exception as err:  # noqa: BLE001 - any other failure is a ZHA change
+        raise LinkIncompatible(f"ZHA's get_zha_gateway failed: {err!r}") from err
 
     try:
         app = gateway.application_controller
@@ -116,9 +118,24 @@ def _ezsp(hass: HomeAssistant) -> Any:
     return ezsp
 
 
+def _features(ezsp: Any) -> int:
+    """Return the feature bits bellows stored, checking they still look right."""
+    try:
+        features = ezsp._xncp_features  # noqa: SLF001
+    except AttributeError as err:
+        raise LinkIncompatible(
+            "bellows no longer keeps the adapter's XNCP feature bits"
+        ) from err
+    if not isinstance(features, int):
+        raise LinkIncompatible(
+            f"bellows' XNCP feature bits are not an integer: {features!r}"
+        )
+    return int(features)
+
+
 def xncp_features(hass: HomeAssistant) -> int:
     """Return the adapter's XNCP feature bits as bellows read them at startup."""
-    return int(getattr(_ezsp(hass), "_xncp_features", 0))
+    return _features(_ezsp(hass))
 
 
 def led_control_supported(hass: HomeAssistant) -> bool:
@@ -129,13 +146,15 @@ def led_control_supported(hass: HomeAssistant) -> bool:
 async def async_set_color(hass: HomeAssistant, rgb: tuple[int, int, int]) -> None:
     """Show an 8-bit RGB colour on the adapter's LED."""
     ezsp = _ezsp(hass)
-    if not int(getattr(ezsp, "_xncp_features", 0)) & FEATURE_LED_CONTROL:
+    if not _features(ezsp) & FEATURE_LED_CONTROL:
         raise LedNotSupported("The adapter firmware does not advertise LED control")
 
     try:
         async with asyncio.timeout(SEND_TIMEOUT):
             request_type = _bellows_led_request_type()
-            if request_type is not None:
+            if request_type is not None and callable(
+                getattr(ezsp, "send_xncp_frame", None)
+            ):
                 red, green, blue = rgb
                 await ezsp.send_xncp_frame(
                     request_type(red=red, green=green, blue=blue)
@@ -146,7 +165,7 @@ async def async_set_color(hass: HomeAssistant, rgb: tuple[int, int, int]) -> Non
         raise
     except TimeoutError as err:
         raise LedCommandFailed(
-            f"The adapter did not answer within {SEND_TIMEOUT} seconds " "(timed out)"
+            f"The adapter did not answer within {SEND_TIMEOUT} seconds (timed out)"
         ) from err
     except Exception as err:  # noqa: BLE001 - any bellows/transport failure
         raise LedCommandFailed(f"Sending the LED frame failed: {err!r}") from err

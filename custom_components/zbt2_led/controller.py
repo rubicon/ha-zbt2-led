@@ -9,6 +9,7 @@ import logging
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.util.hass_dict import HassKey
 
 from . import zha_link
 from .const import (
@@ -32,6 +33,10 @@ _LOGGER = logging.getLogger(__name__)
 
 ISSUES = (ISSUE_INCOMPATIBLE, ISSUE_NOT_SUPPORTED, ISSUE_COMMAND_FAILED)
 
+# Loop time the last frame started, kept across reloads of the config entry so
+# a reload (saving options, for one) cannot send faster than the rate cap.
+LAST_FRAME_START: HassKey[float] = HassKey(f"{DOMAIN}_last_frame_start")
+
 type ReassertFn = Callable[[], Program | None]
 
 
@@ -49,7 +54,13 @@ class LedController:
         self.hass = hass
         self.entry = entry
         self.zha_entry = zha_entry
-        self.driver = LedDriver(hass, self._send, self._on_success, self._on_error)
+        self.driver = LedDriver(
+            hass,
+            self._send,
+            self._on_success,
+            self._on_error,
+            last_start=hass.data.get(LAST_FRAME_START),
+        )
         self.driver.pause()
         self.zha_loaded = False
         self.problem: str | None = None
@@ -64,18 +75,30 @@ class LedController:
 
     @callback
     def async_start(self, reassert: ReassertFn) -> CALLBACK_TYPE:
-        """Start following ZHA; reassert returns what to show after a ZHA start."""
+        """Start following ZHA; reassert returns what to show after a ZHA start.
+
+        The entity calls this each time it is added, including after an
+        entity_id rename, so ZHA's state is always evaluated afresh.
+        """
         self._reassert = reassert
         if self._incompatible is not None:
             self._raise(ISSUE_INCOMPATIBLE, self._incompatible)
         unsub = self.zha_entry.async_on_state_change(self._zha_state_changed)
+        self.zha_loaded = False
         self._zha_state_changed()
         return unsub
 
     @callback
     def async_stop(self) -> None:
-        """Stop sending for good."""
+        """Stop sending for good, remembering when the last frame went out."""
+        if (last_start := self.driver.last_start) is not None:
+            self.hass.data[LAST_FRAME_START] = last_start
         self.driver.stop()
+
+    @property
+    def has_program(self) -> bool:
+        """Return True when the driver has something to show or replay."""
+        return self.driver.has_program
 
     @callback
     def async_add_listener(self, update: CALLBACK_TYPE) -> CALLBACK_TYPE:
@@ -117,7 +140,9 @@ class LedController:
         if not supported:
             self._raise(ISSUE_NOT_SUPPORTED, "feature bit not set")
             return
-        self._clear(ISSUE_INCOMPATIBLE, ISSUE_NOT_SUPPORTED)
+        # A fresh ZHA start is a fresh adapter: drop every earlier verdict and
+        # let the next frame decide, so an off light is not left unavailable.
+        self._clear(*ISSUES)
         if (program := self._reassert()) is None:
             self.driver.clear()
         else:

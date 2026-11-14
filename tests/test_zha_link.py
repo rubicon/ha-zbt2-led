@@ -283,3 +283,64 @@ def test_bellows_not_installed(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(zha_link, "version", missing)
     assert zha_link.installed_bellows_version() is None
+
+
+@pytest.mark.parametrize(
+    "features", [None, "lots", object()], ids=["none", "text", "object"]
+)
+async def test_unreadable_feature_bits_are_incompatible(
+    hass: HomeAssistant, zha_entry: MockConfigEntry, features: object
+) -> None:
+    """Feature bits bellows no longer stores as an integer are incompatible."""
+    ncp = FakeZbt2Ncp()
+    ncp._xncp_features = features  # type: ignore[assignment]
+    start_zha(hass, zha_entry, ncp)
+
+    with pytest.raises(LinkIncompatible, match="feature"):
+        await zha_link.async_set_color(hass, (1, 1, 1))
+    with pytest.raises(LinkIncompatible, match="feature"):
+        zha_link.led_control_supported(hass)
+
+
+async def test_missing_feature_bits_are_incompatible(
+    hass: HomeAssistant, zha_entry: MockConfigEntry
+) -> None:
+    """If bellows stops keeping the feature bits, say so instead of blaming firmware."""
+
+    class NoFeatures:
+        async def customFrame(self, payload: bytes) -> list:  # noqa: N802
+            raise AssertionError("must not send")
+
+    start_zha(hass, zha_entry, NoFeatures())
+
+    with pytest.raises(LinkIncompatible, match="feature"):
+        zha_link.led_control_supported(hass)
+
+
+async def test_gateway_helper_failing_unexpectedly_is_incompatible(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Any error from ZHA's helper other than 'no gateway' is incompatible."""
+
+    def broken(hass: HomeAssistant) -> None:
+        raise RuntimeError("new ZHA")
+
+    monkeypatch.setattr(zha_helpers, "get_zha_gateway", broken)
+
+    with pytest.raises(LinkIncompatible, match="new ZHA"):
+        await zha_link.async_set_color(hass, (1, 1, 1))
+
+
+async def test_bellows_request_type_without_sender_falls_back_to_raw(
+    hass: HomeAssistant,
+    zha_entry: MockConfigEntry,
+    ncp: FakeZbt2Ncp,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A bellows with the request type but no send_xncp_frame uses customFrame."""
+    monkeypatch.setattr(xncp, "SetLedStateReq", object, raising=False)
+    start_zha(hass, zha_entry, ncp)
+
+    await zha_link.async_set_color(hass, (1, 2, 3))
+
+    assert ncp.frames == [b"\x00\x0f\x00\x01\x02\x03"]

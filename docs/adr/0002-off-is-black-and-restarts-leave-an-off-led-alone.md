@@ -28,10 +28,12 @@ Chosen: off sends black, and after a Home Assistant or ZHA restart an off light 
 - Good: by default, the status light works after each restart until the light is used.
 - Bad: once the light has been used, the status light stays hidden until the next restart. A flash on an off light also ends dark.
 - Neutral: the driver needs a way to forget its program (`LedDriver.clear`) so a ZHA reload re-asserts nothing for an off light.
+- Neutral: turning off a light that is already off, with nothing to replay, sends nothing. Otherwise a routine "all lights off" automation would hide the status light after every restart.
+- Neutral: the on/off state is saved with the colour, so a light saved while unavailable comes back as it was.
 
 ## More Information
 
 - Layer model: NabuCasa/silabs-firmware-builder at commit `bbbbf24`.
 - Adapter reset on connect: `bellows/ezsp/__init__.py:139-140` (`_startup_reset` calls `reset()` for serial ports; bellows 1.1.0).
-- Tests: `tests/test_light.py` (`test_restart_while_off_leaves_the_led_alone`, `test_zha_reload_while_off_leaves_the_led_alone` and the always-black variants).
+- Tests: `tests/test_light.py` (`test_restart_while_off_leaves_the_led_alone`, `test_zha_reload_while_off_leaves_the_led_alone`, `test_turning_off_an_off_light_after_restart_leaves_it_alone` and the always-black variants).
 - Chosen by Dax Davis on 2026-11-14.

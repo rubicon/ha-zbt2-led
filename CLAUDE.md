@@ -26,7 +26,7 @@ See ARCHITECTURE.md for the module layout.
 ## Code rules
 
 - Only `zha_link.py` may touch ZHA or bellows internals. Every access there is checked and raised as a `LedLinkError` subclass; nothing else imports from `homeassistant.components.zha` or `bellows`.
-- Never crash on a link failure. The controller turns errors into availability and repair issues; the driver never raises.
+- Never crash on a link failure. `zha_link.py` raises only `LedLinkError` subclasses, the driver turns any other exception into a failed frame, and the controller turns errors into availability and repair issues.
 - Never send faster than `MIN_FRAME_INTERVAL`. Timing belongs to `driver.py`; effects only describe frames.
 - An off light under the default idle behaviour must send nothing after a Home Assistant or ZHA restart. Tests cover this; keep them.
 - Tests drive ZHA through `tests/conftest.py` (`start_zha` and `stop_zha`) and the firmware double in `tests/firmware.py`, which decodes frames independently of the integration. Wire bytes in tests are literal.

@@ -87,6 +87,7 @@ def restore(
     rgb: tuple[int, int, int] = RED,
     brightness: int = 128,
     effect: str = EFFECT_SOLID,
+    is_on: bool | None = None,
 ) -> None:
     """Seed what Home Assistant saved for the light before a restart."""
     mock_restore_cache_with_extra_data(
@@ -95,6 +96,7 @@ def restore(
             (
                 State(ENTITY_ID, state),
                 {
+                    "is_on": state == STATE_ON if is_on is None else is_on,
                     "rgb_color": list(rgb),
                     "brightness": brightness,
                     "effect": effect,
@@ -346,6 +348,10 @@ async def test_zha_reload_while_off_leaves_the_led_alone(
     assert fresh.frames == []
     assert hass.states.get(ENTITY_ID).state == STATE_OFF
 
+    await turn_on(hass, **{ATTR_RGB_COLOR: GREEN})
+    await advance(hass, STEP)
+    assert fresh.colors == [GREEN]
+
 
 @pytest.mark.parametrize("options", [make_options(idle_behavior=IDLE_BLACK)])
 @pytest.mark.usefixtures("loaded_entry")
@@ -369,9 +375,9 @@ async def test_zha_reload_while_off_sends_black_when_asked(
     "extra",
     [
         {},
-        {"rgb_color": [1, 2], "brightness": 1, "effect": EFFECT_SOLID},
-        {"rgb_color": [1, 2, 3], "brightness": "dim", "effect": EFFECT_SOLID},
-        {"rgb_color": [1, 2, 3], "brightness": 1, "effect": "Rainbow"},
+        {"is_on": False, "rgb_color": [1, 2], "brightness": 1, "effect": "Solid"},
+        {"is_on": False, "rgb_color": [1, 2, 3], "brightness": "x", "effect": "Solid"},
+        {"is_on": False, "rgb_color": [1, 2, 3], "brightness": 1, "effect": "Rainbow"},
     ],
     ids=["missing", "short-colour", "bad-brightness", "unknown-effect"],
 )
@@ -390,3 +396,52 @@ async def test_unreadable_saved_data_falls_back_to_defaults(
     assert ncp.colors == [WHITE]
     assert hass.states.get(ENTITY_ID).attributes[ATTR_EFFECT] == EFFECT_SOLID
     await hass.config_entries.async_unload(config_entry.entry_id)
+
+
+async def test_restart_while_unavailable_keeps_an_on_light(
+    hass: HomeAssistant, config_entry: MockConfigEntry, ncp: FakeZbt2Ncp
+) -> None:
+    """A light saved while unavailable comes back as it was, not off."""
+    restore(hass, STATE_UNAVAILABLE, RED, 255, EFFECT_SOLID, is_on=True)
+    await setup_entry(hass, config_entry)
+
+    assert ncp.colors == [RED]
+    assert hass.states.get(ENTITY_ID).state == STATE_ON
+    await hass.config_entries.async_unload(config_entry.entry_id)
+
+
+async def test_turning_off_an_off_light_after_restart_leaves_it_alone(
+    hass: HomeAssistant, config_entry: MockConfigEntry, ncp: FakeZbt2Ncp
+) -> None:
+    """A redundant turn_off, such as a nightly all-off, keeps hands off."""
+    restore(hass, STATE_OFF)
+    await setup_entry(hass, config_entry)
+
+    await turn_off(hass)
+    await advance(hass, STEP)
+
+    assert ncp.frames == []
+    assert hass.states.get(ENTITY_ID).state == STATE_OFF
+    await hass.config_entries.async_unload(config_entry.entry_id)
+
+
+@pytest.mark.usefixtures("loaded_entry")
+async def test_renaming_the_entity_keeps_driving_the_led(
+    hass: HomeAssistant, entity_registry: er.EntityRegistry, ncp: FakeZbt2Ncp
+) -> None:
+    """Renaming the entity re-adds it; the LED keeps following it."""
+    await turn_on(hass, **{ATTR_RGB_COLOR: RED})
+    entity_registry.async_update_entity(ENTITY_ID, new_entity_id="light.status_led")
+    await hass.async_block_till_done()
+    await advance(hass, STEP)
+
+    await hass.services.async_call(
+        LIGHT_DOMAIN,
+        SERVICE_TURN_ON,
+        {ATTR_ENTITY_ID: "light.status_led", ATTR_RGB_COLOR: GREEN},
+        blocking=True,
+    )
+    await advance(hass, STEP)
+
+    assert ncp.last_color == GREEN
+    assert hass.states.get("light.status_led").state == STATE_ON

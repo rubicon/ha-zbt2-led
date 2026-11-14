@@ -31,8 +31,13 @@ class LedDriver:
         send: SendFn,
         on_success: Callable[[], None],
         on_error: Callable[[LedLinkError], None],
+        last_start: float | None = None,
     ) -> None:
-        """Initialize the driver; nothing is sent until play()."""
+        """Initialize the driver; nothing is sent until play().
+
+        last_start is the loop time the previous driver last started a frame,
+        so a driver built after a reload still honours the rate cap.
+        """
         self._hass = hass
         self._send = send
         self._on_success = on_success
@@ -44,7 +49,7 @@ class LedDriver:
         self._stopped = False
         self._sending = False
         self._changed_in_flight = False
-        self._last_start: float | None = None
+        self._last_start = last_start
         self._timer: CALLBACK_TYPE | None = None
         self._task: asyncio.Task[None] | None = None
         self.frames_sent = 0
@@ -57,6 +62,16 @@ class LedDriver:
     def paused(self) -> bool:
         """Return True while sending is paused."""
         return self._paused
+
+    @property
+    def last_start(self) -> float | None:
+        """Return the loop time the last frame started, if any."""
+        return self._last_start
+
+    @property
+    def has_program(self) -> bool:
+        """Return True when there is a program to play or replay."""
+        return self._program is not None
 
     @callback
     def play(self, program: Program) -> None:
@@ -89,10 +104,11 @@ class LedDriver:
 
     @callback
     def resume(self) -> None:
-        """Send again, replaying the current program from its first frame."""
+        """Send again from the first frame, starting the failure count afresh."""
         self._paused = False
         self._blocked = False
         self._index = 0
+        self.consecutive_failures = 0
         if self._sending:
             self._changed_in_flight = True
             return
@@ -150,15 +166,20 @@ class LedDriver:
     async def _send_frame(self, color: RGB, hold: float) -> None:
         """Send one frame, then line up whatever comes next."""
         started = self._hass.loop.time()
+        error: LedLinkError | None = None
         try:
             await self._send(color)
         except LedLinkError as err:
+            error = err
+        except Exception as err:  # noqa: BLE001 - never let a surprise stop sending
+            error = LedCommandFailed(f"Unexpected error sending the frame: {err!r}")
+            error.__cause__ = err
+        finally:
             self.last_latency = self._hass.loop.time() - started
             self._sending = False
-            self._failed(err)
+        if error is not None:
+            self._failed(error)
             return
-        self.last_latency = self._hass.loop.time() - started
-        self._sending = False
         self.frames_sent += 1
         self.consecutive_failures = 0
         self.last_error = None

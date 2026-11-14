@@ -19,7 +19,7 @@ from custom_components.zbt2_led.const import (
     IDLE_BLACK,
 )
 
-from .conftest import SERIAL, make_options, start_zha
+from .conftest import SERIAL, STEP, advance, make_options, start_zha
 from .firmware import FakeZbt2Ncp
 
 
@@ -150,7 +150,7 @@ async def test_unsupported_bellows_is_an_inline_error(
 
 @pytest.mark.usefixtures("zha_running")
 async def test_options_change_brightness_cap_and_idle_behaviour(
-    hass: HomeAssistant, loaded_entry: MockConfigEntry
+    hass: HomeAssistant, loaded_entry: MockConfigEntry, ncp: FakeZbt2Ncp
 ) -> None:
     """The options flow stores both sections and reloads the entry."""
     result = await hass.config_entries.options.async_init(loaded_entry.entry_id)
@@ -168,3 +168,12 @@ async def test_options_change_brightness_cap_and_idle_behaviour(
         max_brightness=40, idle_behavior=IDLE_BLACK
     )
     assert loaded_entry.state is ConfigEntryState.LOADED
+
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": "light.zbt2_led", "rgb_color": (255, 255, 255)},
+        blocking=True,
+    )
+    await advance(hass, STEP)
+    assert ncp.last_color == (102, 102, 102)

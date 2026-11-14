@@ -55,8 +55,9 @@ DEFAULT_BRIGHTNESS = 255
 
 @dataclass
 class LedExtraStoredData(ExtraStoredData):
-    """What an off light still remembers across a restart."""
+    """What the light remembers across a restart, even while off or unavailable."""
 
+    is_on: bool
     rgb_color: RGB
     brightness: int
     effect: str
@@ -69,14 +70,15 @@ class LedExtraStoredData(ExtraStoredData):
     def from_dict(cls, data: dict[str, Any]) -> Self | None:
         """Return stored data, or None if it does not look like ours."""
         try:
+            is_on = data["is_on"]
             rgb = tuple(int(c) for c in data["rgb_color"])
             brightness = int(data["brightness"])
             effect = str(data["effect"])
         except (KeyError, TypeError, ValueError):
             return None
-        if len(rgb) != 3 or effect not in EFFECTS:
+        if not isinstance(is_on, bool) or len(rgb) != 3 or effect not in EFFECTS:
             return None
-        return cls(rgb, brightness, effect)  # type: ignore[arg-type]
+        return cls(is_on, rgb, brightness, effect)  # type: ignore[arg-type]
 
 
 async def async_setup_entry(
@@ -147,27 +149,30 @@ class Zbt2LedLight(LightEntity, RestoreEntity):
     @property
     def extra_restore_state_data(self) -> LedExtraStoredData:
         """Remember colour, brightness and effect even while off."""
-        return LedExtraStoredData(self._rgb, self._brightness, self._effect)
+        return LedExtraStoredData(
+            self._attr_is_on, self._rgb, self._brightness, self._effect
+        )
 
     async def async_added_to_hass(self) -> None:
-        """Restore the last state, then start following ZHA."""
+        """Restore the last state, then start following ZHA.
+
+        The saved extra data is preferred over the saved state, because a
+        light saved while unavailable has lost its on/off state.
+        """
         await super().async_added_to_hass()
-        if (last := await self.async_get_last_state()) is not None:
-            self._attr_is_on = last.state == STATE_ON
         if (extra := await self.async_get_last_extra_data()) is not None and (
             stored := LedExtraStoredData.from_dict(extra.as_dict())
         ) is not None:
+            self._attr_is_on = stored.is_on
             self._rgb = stored.rgb_color
             self._brightness = stored.brightness
             self._effect = stored.effect
+        elif (last := await self.async_get_last_state()) is not None:
+            self._attr_is_on = last.state == STATE_ON
         self.async_on_remove(
             self._controller.async_add_listener(self.async_write_ha_state)
         )
         self.async_on_remove(self._controller.async_start(self._reassert_program))
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Stop sending."""
-        self._controller.async_stop()
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on, or flash, the LED."""
@@ -196,9 +201,14 @@ class Zbt2LedLight(LightEntity, RestoreEntity):
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn the LED off, which for this firmware means black."""
+        """Turn the LED off, which for this firmware means black.
+
+        An off light with nothing to replay is showing the adapter's own status
+        light (hands off after a restart), so a redundant turn_off leaves it.
+        """
+        if self._attr_is_on or self._controller.has_program:
+            self._controller.async_play(off_program())
         self._attr_is_on = False
-        self._controller.async_play(off_program())
         self.async_write_ha_state()
 
     @callback

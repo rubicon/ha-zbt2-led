@@ -58,7 +58,12 @@ def restore_on(hass: HomeAssistant) -> None:
         (
             (
                 State(ENTITY_ID, STATE_ON),
-                {"rgb_color": list(RED), "brightness": 255, "effect": "Solid"},
+                {
+                    "is_on": True,
+                    "rgb_color": list(RED),
+                    "brightness": 255,
+                    "effect": "Solid",
+                },
             ),
         ),
     )
@@ -335,3 +340,66 @@ async def test_zha_gateway_vanishing_waits_for_zha_to_restart(
     await advance(hass, STEP)
 
     assert ncp.colors == [RED]
+
+
+@pytest.mark.usefixtures("loaded_entry")
+async def test_zha_restart_clears_the_not_responding_repair(
+    hass: HomeAssistant, zha_running: MockConfigEntry, ncp: FakeZbt2Ncp
+) -> None:
+    """Restarting ZHA, as the repair suggests, brings an off light back."""
+    await turn_on_red(hass)
+    ncp.ezsp_status = EmberStatus.ERR_FATAL
+    await hass.services.async_call(
+        LIGHT_DOMAIN, "turn_off", {ATTR_ENTITY_ID: ENTITY_ID}, blocking=True
+    )
+    for _ in range(FAILURES_BEFORE_REPAIR):
+        await advance(hass, RETRY_INTERVAL + SLACK)
+    assert issue(hass, ISSUE_COMMAND_FAILED) is not None
+
+    stop_zha(hass, zha_running)
+    fresh = FakeZbt2Ncp()
+    start_zha(hass, zha_running, fresh)
+    await advance(hass, STEP)
+
+    assert issue(hass, ISSUE_COMMAND_FAILED) is None
+    assert hass.states.get(ENTITY_ID).state == STATE_OFF
+    assert fresh.frames == []
+
+    await turn_on_red(hass)
+    await advance(hass, STEP)
+    assert fresh.colors == [RED]
+
+
+@pytest.mark.usefixtures("loaded_entry")
+async def test_unexpected_link_error_keeps_the_light_working(
+    hass: HomeAssistant, zha_running: MockConfigEntry, ncp: FakeZbt2Ncp
+) -> None:
+    """A bellows change mid-run raises a repair; after ZHA restarts it works again."""
+    ncp._xncp_features = None  # type: ignore[assignment]
+    await turn_on_red(hass)
+
+    assert hass.states.get(ENTITY_ID).state == STATE_UNAVAILABLE
+    assert issue(hass, ISSUE_INCOMPATIBLE) is not None
+
+    stop_zha(hass, zha_running)
+    fresh = FakeZbt2Ncp()
+    start_zha(hass, zha_running, fresh)
+    await advance(hass, STEP)
+
+    assert issue(hass, ISSUE_INCOMPATIBLE) is None
+    assert fresh.colors == [RED]
+
+
+@pytest.mark.usefixtures("zha_running")
+async def test_reload_keeps_the_rate_cap(
+    hass: HomeAssistant, loaded_entry: MockConfigEntry, ncp: FakeZbt2Ncp
+) -> None:
+    """Reloading the entry, as saving options does, does not reset the rate cap."""
+    await turn_on_red(hass)
+    assert await hass.config_entries.async_reload(loaded_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert ncp.colors == [RED]
+
+    await advance(hass, STEP)
+    assert ncp.colors == [RED, RED]

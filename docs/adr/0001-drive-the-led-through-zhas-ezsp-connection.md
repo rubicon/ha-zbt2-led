@@ -20,10 +20,11 @@ The ZBT-2's Zigbee firmware can set its RGB LED through XNCP command `0x0F00`, s
 
 Chosen: use ZHA's EZSP object, with every private access in `zha_link.py`.
 
-- Every attribute on the path is checked. A missing helper or attribute raises `LinkIncompatible`, a gateway that is not up yet raises `ZhaNotReady`, firmware without feature bit 31 raises `LedNotSupported`, and a rejected or timed-out frame raises `LedCommandFailed`.
+- Every attribute on the path is checked, including the type of bellows' stored feature bits. A missing helper or attribute, or any unexpected error from ZHA's helper, raises `LinkIncompatible`; a gateway that is not up yet raises `ZhaNotReady`; firmware without feature bit 31 raises `LedNotSupported`; and a rejected or timed-out frame raises `LedCommandFailed`. The module raises nothing else.
 - The bellows major version is checked at setup, off the event loop. Only release line 1 is accepted.
-- Errors become an unavailable entity and a repair issue. Nothing propagates out of the driver.
-- When bellows gains `SetLedStateReq`, bellows builds the frame; the raw path is the fallback.
+- Errors become an unavailable entity and a repair issue. The driver also turns any unexpected exception into a failed frame, so nothing propagates out of it and sending never stops for good.
+- A ZHA restart clears every repair and starts the failure count afresh, because it resets the adapter.
+- When bellows gains `SetLedStateReq` and `send_xncp_frame`, bellows builds the frame; the raw path is the fallback.
 
 Opening the port separately was rejected: the port is exclusive, and a second client would break Zigbee. Waiting for upstream was rejected because it has no date, and this integration can switch to the public API when one exists.
 

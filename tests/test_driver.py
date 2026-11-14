@@ -86,6 +86,9 @@ async def test_blink_plays_at_two_frames_per_second(
     """Blink alternates colour and black every half second, indefinitely."""
     driver.play(effect_program(EFFECT_BLINK, RED))
     await hass.async_block_till_done()
+    await advance(hass, MIN_FRAME_INTERVAL - 0.1)
+    assert link.sent == [RED]
+
     for _ in range(4):
         await advance(hass, STEP)
 
@@ -336,3 +339,42 @@ async def test_resume_during_a_send_replays_after_it(
     await advance(hass, STEP)
 
     assert link.sent == [RED, RED]
+
+
+async def test_unexpected_error_is_reported_as_a_failed_frame(
+    hass: HomeAssistant, driver: LedDriver, link: Link
+) -> None:
+    """An exception that is not a link error is retried, not left to wedge sending."""
+    link.fail_with = RuntimeError("bellows changed")  # type: ignore[assignment]
+    driver.play(effect_program(EFFECT_SOLID, RED))
+    await hass.async_block_till_done()
+
+    assert len(link.errors) == 1
+    assert isinstance(link.errors[0], LedCommandFailed)
+    assert "bellows changed" in str(link.errors[0])
+
+    link.fail_with = None
+    driver.play(effect_program(EFFECT_SOLID, GREEN))
+    await advance(hass, STEP)
+    assert link.sent == [GREEN]
+
+
+async def test_last_frame_time_carries_over_to_a_new_driver(
+    hass: HomeAssistant, link: Link
+) -> None:
+    """A driver built after a reload still waits out the rate cap."""
+    first = LedDriver(hass, link.send, link.on_success, link.on_error)
+    first.play(effect_program(EFFECT_SOLID, RED))
+    await hass.async_block_till_done()
+    first.stop()
+
+    second = LedDriver(
+        hass, link.send, link.on_success, link.on_error, last_start=first.last_start
+    )
+    second.play(effect_program(EFFECT_SOLID, GREEN))
+    await hass.async_block_till_done()
+    assert link.sent == [RED]
+
+    await advance(hass, STEP)
+    assert link.sent == [RED, GREEN]
+    second.stop()

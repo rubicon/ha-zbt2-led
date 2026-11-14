@@ -46,7 +46,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: Zbt2LedConfigEntry) -> b
         incompatible: str | None = str(err)
     else:
         incompatible = None
-    entry.runtime_data = LedController(hass, entry, zha_entry, incompatible)
+    entry.runtime_data = controller = LedController(
+        hass, entry, zha_entry, incompatible
+    )
+    entry.async_on_unload(controller.async_stop)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
