@@ -92,7 +92,7 @@ Saving the options reloads the integration.
 - **Effects are coarse on purpose.** The integration sends at most two colour changes per second, so the LED never keeps the Zigbee adapter busy. Quick changes are merged: only the newest one is shown.
 - **While Zigbee Home Automation is restarting**, the light shows as unavailable. Commands sent then are ignored, and the light comes back in its last state.
 - **Once you use the light, the status light stays hidden** until the next restart. Even a flash on an off light ends dark. With **Leave it alone**, the status light comes back after the next restart of Home Assistant or Zigbee Home Automation. Turning off a light that is already off does not count as using it, so an "all lights off" automation leaves the status light alone.
-- **Restarting Zigbee Home Automation clears this integration's repairs.** It resets the adapter, so the integration checks the adapter again from scratch.
+- **Restarting Zigbee Home Automation makes the integration check the adapter again.** It resets the adapter, so a "not responding" repair clears and the light comes back. Repairs about firmware or version support come back until that is fixed.
 
 ## Troubleshooting
 
