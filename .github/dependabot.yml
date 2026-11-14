@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+
+  # pytest-homeassistant-custom-component pins an exact Home Assistant
+  # release, and zha must match the version that release's ZHA manifest
+  # requires. A harness bump without the matching zha bump fails CI, which
+  # is the intended signal to update both together.
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
