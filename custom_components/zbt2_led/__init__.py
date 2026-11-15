@@ -3,10 +3,15 @@
 
 from __future__ import annotations
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import (
+    SIGNAL_CONFIG_ENTRY_CHANGED,
+    ConfigEntry,
+    ConfigEntryChange,
+)
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from . import zha_link
 from .const import CONF_SERIAL_NUMBER, DOMAIN, ZHA_DOMAIN
@@ -50,6 +55,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: Zbt2LedConfigEntry) -> b
         hass, entry, zha_entry, incompatible
     )
     entry.async_on_unload(controller.async_stop)
+
+    @callback
+    def _zha_entry_changed(change: ConfigEntryChange, changed: ConfigEntry) -> None:
+        # The controller follows one ZHA entry. Once it is deleted, set up again
+        # so a new one is found; until then setup retries.
+        if change is ConfigEntryChange.REMOVED and changed is zha_entry:
+            hass.config_entries.async_schedule_reload(entry.entry_id)
+
+    entry.async_on_unload(
+        async_dispatcher_connect(hass, SIGNAL_CONFIG_ENTRY_CHANGED, _zha_entry_changed)
+    )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

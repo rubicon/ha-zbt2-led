@@ -535,3 +535,59 @@ async def test_removed_entry_leaves_nothing_behind(
     assert ir.async_get(hass).issues == {}
     assert ncp.frames == []
     await unload(hass, new_entry)
+
+
+async def test_zha_deleted_and_added_again_brings_the_light_back(
+    hass: HomeAssistant,
+    config_entry: MockConfigEntry,
+    zha_running: MockConfigEntry,
+    ncp: FakeZbt2Ncp,
+) -> None:
+    """Deleting ZHA and setting it up again is followed, not left unavailable."""
+    await setup_entry(hass, config_entry)
+    await turn_on_red(hass)
+    await advance(hass, STEP)
+    assert ncp.colors == [RED]
+
+    stop_zha(hass, zha_running)
+    assert await hass.config_entries.async_remove(zha_running.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(ENTITY_ID).state == STATE_UNAVAILABLE
+
+    new_zha = MockConfigEntry(domain="zha", data=dict(zha_running.data))
+    new_zha.add_to_hass(hass)
+    fresh = FakeZbt2Ncp()
+    start_zha(hass, new_zha, fresh)
+    # Long enough for Home Assistant's first setup retry, which runs as a
+    # background task.
+    await advance(hass, 10)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await advance(hass, STEP)
+
+    assert config_entry.state is ConfigEntryState.LOADED
+    assert hass.states.get(ENTITY_ID).state == STATE_ON
+    assert fresh.colors == [RED]
+    await unload(hass, config_entry)
+    stop_zha(hass, new_zha)
+
+
+async def test_removing_another_entry_changes_nothing(
+    hass: HomeAssistant,
+    config_entry: MockConfigEntry,
+    zha_running: MockConfigEntry,
+    ncp: FakeZbt2Ncp,
+) -> None:
+    """Only the ZHA entry the light follows makes it set up again."""
+    await setup_entry(hass, config_entry)
+    await turn_on_red(hass)
+    await advance(hass, STEP)
+    other = MockConfigEntry(domain="sun")
+    other.add_to_hass(hass)
+
+    assert await hass.config_entries.async_remove(other.entry_id)
+    await hass.async_block_till_done()
+    await advance(hass, STEP)
+
+    assert ncp.frames == [bytes.fromhex("000f00ff0000")]
+    assert hass.states.get(ENTITY_ID).state == STATE_ON
+    await unload(hass, config_entry)

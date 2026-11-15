@@ -38,6 +38,7 @@
 - A ZHA reload resets the adapter, so the same path re-asserts the light after it.
 - Reloading this integration (saving options) or re-adding the entity (an entity_id rename) does not reset the adapter. `LinkMemory` in `hass.data` carries the last frame time, whether the LED shows something this integration sent, and any standing repair across those.
 - A ZHA start is recognised by ZHA's gateway object, which ZHA builds anew each time its config entry loads. `LinkMemory` keeps a weak reference to the gateway the LED was last brought in step with, so a ZHA restart counts as an adapter reset even when it happened while this integration was unloaded or its entity disabled.
+- The controller follows one ZHA config entry. When that entry is deleted, the integration reloads itself; setup then finds the new ZHA entry, or raises `ConfigEntryNotReady` so Home Assistant retries until one exists.
 - Removing the config entry deletes `LinkMemory` along with the repair issues.
 
 ## Boundaries
