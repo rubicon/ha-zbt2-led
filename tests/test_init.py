@@ -11,7 +11,11 @@ from homeassistant.components.light import (
     DOMAIN as LIGHT_DOMAIN,
 )
 from homeassistant.components.zha.helpers import get_zha_data
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import (
+    SIGNAL_CONFIG_ENTRY_CHANGED,
+    ConfigEntryChange,
+    ConfigEntryState,
+)
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     SERVICE_TURN_ON,
@@ -21,6 +25,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -568,13 +573,16 @@ async def test_zha_deleted_and_added_again_brings_the_light_back(
     assert hass.states.get(ENTITY_ID).state == STATE_UNAVAILABLE
 
     new_zha = MockConfigEntry(domain="zha", data=dict(zha_running.data))
+    # Add it the way ConfigEntries.async_add does, minus ZHA's own setup, which
+    # cannot run here. No waiting for Home Assistant's setup retry, which backs
+    # off to 10 minutes: adding the ZHA entry is what brings the light back.
     new_zha.add_to_hass(hass)
+    async_dispatcher_send(
+        hass, SIGNAL_CONFIG_ENTRY_CHANGED, ConfigEntryChange.ADDED, new_zha
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
     fresh = FakeZbt2Ncp()
     start_zha(hass, new_zha, fresh)
-    # Long enough for Home Assistant's first setup retry, which runs as a
-    # background task.
-    await advance(hass, 10)
-    await hass.async_block_till_done(wait_background_tasks=True)
     await advance(hass, STEP)
 
     assert config_entry.state is ConfigEntryState.LOADED
@@ -617,3 +625,27 @@ async def test_two_zha_entries_without_the_serial_is_not_ready(
     await hass.async_block_till_done()
 
     assert config_entry.state is ConfigEntryState.SETUP_RETRY
+
+
+async def test_zha_entry_added_while_loaded_changes_nothing(
+    hass: HomeAssistant,
+    config_entry: MockConfigEntry,
+    zha_running: MockConfigEntry,
+    ncp: FakeZbt2Ncp,
+) -> None:
+    """A new ZHA entry only retries a setup that is waiting; a loaded light stays."""
+    await setup_entry(hass, config_entry)
+    await turn_on_red(hass)
+    await advance(hass, STEP)
+    other_zha = MockConfigEntry(domain="zha", data={"device": {"path": "/dev/ttyS1"}})
+    other_zha.add_to_hass(hass)
+
+    async_dispatcher_send(
+        hass, SIGNAL_CONFIG_ENTRY_CHANGED, ConfigEntryChange.ADDED, other_zha
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await advance(hass, STEP)
+
+    assert ncp.frames == [bytes.fromhex("000f00ff0000")]
+    assert config_entry.state is ConfigEntryState.LOADED
+    await unload(hass, config_entry)
