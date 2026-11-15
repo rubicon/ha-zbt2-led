@@ -21,11 +21,12 @@ jobs:
         with:
           node-version: "22"
 
+      # Exact versions and integrity hashes come from package-lock.json.
       - name: Install commitlint
-        run: npm install --no-save @commitlint/cli@19 @commitlint/config-conventional@19
+        run: npm ci --ignore-scripts
 
       - name: Lint all commits in this PR
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: npx commitlint --from "$BASE_SHA" --to "$HEAD_SHA" --verbose
+        run: npx --no-install commitlint --from "$BASE_SHA" --to "$HEAD_SHA" --verbose

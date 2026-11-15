@@ -9,6 +9,19 @@ updates:
       prefix: "ci"
       include: "scope"
 
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      commitlint:
+        patterns:
+          - "@commitlint/*"
+
   - package-ecosystem: pip
     directory: "/"
     schedule:
