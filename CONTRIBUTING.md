@@ -30,6 +30,10 @@ python3.14 -m venv .venv
 
 The test run treats warnings as errors and requires 95% coverage. CI runs the same commands plus hassfest and HACS validation.
 
+## Releases
+
+release-please opens a release PR from `main` and writes the entry in `CHANGELOG.md`, creating the file with the first release. Only `feat`, `fix`, `perf` and `revert` commits appear there, so a release is proposed only once one of those lands. Edit the entry in the release PR before merging it. Never bump `manifest.json`'s version by hand.
+
 ## Architecture
 
 See [ARCHITECTURE.md](ARCHITECTURE.md).
