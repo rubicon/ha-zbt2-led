@@ -201,6 +201,26 @@ async def test_failed_frame_is_reported_and_retried(
     assert driver.consecutive_failures == 0
 
 
+async def test_failed_frame_waits_thirty_seconds_before_retrying(
+    hass: HomeAssistant, driver: LedDriver, link: Link
+) -> None:
+    """A rejected frame is not retried at the frame rate, so a busy adapter rests.
+
+    advance() fires the timers due within a window from now, and the clock does
+    not move between calls, so the two windows below bracket the retry.
+    """
+    link.fail_with = LedCommandFailed("busy")
+    driver.play(effect_program(EFFECT_SOLID, RED))
+    await hass.async_block_till_done()
+    link.fail_with = None
+
+    await advance(hass, 29)
+    assert link.sent == []
+
+    await advance(hass, 30 + SLACK)
+    assert link.sent == [RED]
+
+
 @pytest.mark.parametrize(
     "error", [ZhaNotReady("down"), LedNotSupported("old firmware")], ids=str
 )
