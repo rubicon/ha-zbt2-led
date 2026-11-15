@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/rubicon/ha-zbt2-led/compare/v0.1.0...v0.1.1) (2026-11-15)
+
+
+### Fixed
+
+* accept the off effect to end a running effect ([#13](https://github.com/rubicon/ha-zbt2-led/issues/13)) ([3d62f13](https://github.com/rubicon/ha-zbt2-led/commit/3d62f137628b04313f94b386cb4a6ba451d4a5f6)), closes [#12](https://github.com/rubicon/ha-zbt2-led/issues/12)
+
 ## 0.1.0 (2026-11-15)
 
 
