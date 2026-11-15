@@ -237,6 +237,21 @@ async def test_flash_returns_to_the_previous_state(
     assert state.attributes[ATTR_RGB_COLOR] == GREEN
 
 
+@pytest.mark.parametrize("options", [make_options(max_brightness=50)])
+@pytest.mark.usefixtures("loaded_entry")
+async def test_flash_honours_brightness_and_the_cap(
+    hass: HomeAssistant, ncp: FakeZbt2Ncp
+) -> None:
+    """A flash is dimmed like the light: its brightness, then the cap."""
+    await turn_on(hass, **{ATTR_RGB_COLOR: GREEN, ATTR_BRIGHTNESS: 128})
+    await turn_on(hass, **{ATTR_FLASH: FLASH_SHORT, ATTR_RGB_COLOR: RED})
+    for _ in range(3):
+        await advance(hass, STEP)
+
+    # 255 * 128/255 * 50% = 64
+    assert ncp.colors == [(0, 64, 0), (64, 0, 0), BLACK, (0, 64, 0)]
+
+
 @pytest.mark.usefixtures("loaded_entry")
 async def test_flash_while_off_stays_off(hass: HomeAssistant, ncp: FakeZbt2Ncp) -> None:
     """Flashing an off light blinks and ends dark, and the light stays off."""
