@@ -19,7 +19,14 @@ from custom_components.zbt2_led.const import (
     IDLE_BLACK,
 )
 
-from .conftest import SERIAL, STEP, advance, make_options, start_zha
+from .conftest import (
+    SERIAL,
+    STEP,
+    ZBT2_HW_DOMAIN,
+    advance,
+    make_options,
+    start_zha,
+)
 from .firmware import FakeZbt2Ncp
 
 
@@ -46,6 +53,34 @@ async def test_adds_the_zbt2(hass: HomeAssistant) -> None:
     assert result["options"] == make_options()
     assert result["result"].unique_id == SERIAL
     await hass.config_entries.async_unload(result["result"].entry_id)
+
+
+async def test_adds_the_zbt2_on_a_tty_path(hass: HomeAssistant) -> None:
+    """ZHA set up on /dev/ttyACM0 is matched to the ZBT-2 by its device path.
+
+    The path carries no serial number, so the flow matches the hardware entry's
+    device path, and setup takes ZHA's only entry as the ZBT-2's.
+    """
+    tty = "/dev/ttyACM0"
+    MockConfigEntry(
+        domain=ZBT2_HW_DOMAIN,
+        unique_id=SERIAL,
+        data={"device": tty, "serial_number": SERIAL},
+    ).add_to_hass(hass)
+    zha_entry = MockConfigEntry(
+        domain="zha", data={"device": {"path": tty}, "radio_type": "ezsp"}
+    )
+    zha_entry.add_to_hass(hass)
+    start_zha(hass, zha_entry, FakeZbt2Ncp())
+
+    result = await start_flow(hass)
+    assert result["description_placeholders"] == {"serial_number": SERIAL}
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["result"].state is ConfigEntryState.LOADED
+    await hass.config_entries.async_unload(result["result"].entry_id)
+    get_zha_data(hass).gateway_proxy = None
 
 
 async def test_aborts_without_zha(hass: HomeAssistant) -> None:

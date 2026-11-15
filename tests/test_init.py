@@ -604,3 +604,16 @@ async def test_removing_another_entry_changes_nothing(
     assert ncp.frames == [bytes.fromhex("000f00ff0000")]
     assert hass.states.get(ENTITY_ID).state == STATE_ON
     await unload(hass, config_entry)
+
+
+async def test_two_zha_entries_without_the_serial_is_not_ready(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> None:
+    """With two ZHA entries and no serial in either path, neither is guessed."""
+    for tty in ("/dev/ttyACM0", "/dev/ttyACM1"):
+        MockConfigEntry(domain="zha", data={"device": {"path": tty}}).add_to_hass(hass)
+
+    assert not await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.SETUP_RETRY

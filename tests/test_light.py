@@ -11,6 +11,7 @@ from homeassistant.components.light import (
     ATTR_RGB_COLOR,
     ATTR_SUPPORTED_COLOR_MODES,
     DOMAIN as LIGHT_DOMAIN,
+    FLASH_LONG,
     FLASH_SHORT,
     ColorMode,
     LightEntityFeature,
@@ -260,6 +261,24 @@ async def test_flash_while_off_stays_off(hass: HomeAssistant, ncp: FakeZbt2Ncp) 
         await advance(hass, STEP)
 
     assert ncp.colors == [RED, BLACK, BLACK]
+    assert hass.states.get(ENTITY_ID).state == STATE_OFF
+
+
+@pytest.mark.usefixtures("loaded_entry")
+async def test_turning_off_an_off_light_stops_its_flash(
+    hass: HomeAssistant, ncp: FakeZbt2Ncp
+) -> None:
+    """turn_off on an off light still ends a flash that is playing."""
+    await turn_on(hass, **{ATTR_FLASH: FLASH_LONG, ATTR_RGB_COLOR: RED})
+    await advance(hass, STEP)
+    assert ncp.colors == [RED, BLACK]
+
+    await turn_off(hass)
+    for _ in range(4):
+        await advance(hass, STEP)
+
+    assert RED not in ncp.colors[2:]
+    assert ncp.last_color == BLACK
     assert hass.states.get(ENTITY_ID).state == STATE_OFF
 
 
