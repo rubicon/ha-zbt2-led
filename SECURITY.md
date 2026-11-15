@@ -18,4 +18,4 @@ Expect an acknowledgement within a few business days, updates while the report i
 
 ## Scope
 
-This integration runs inside Home Assistant and is built to send commands to a USB Zigbee adapter through ZHA. Relevant reports include anything that lets an unprivileged Home Assistant user or a network peer send arbitrary frames to the adapter, crash Home Assistant or ZHA, or read data they should not. Include your Home Assistant version, the integration version and the ZBT-2 firmware version.
+This integration runs inside Home Assistant and sends commands to a USB Zigbee adapter through ZHA. Relevant reports include anything that lets an unprivileged Home Assistant user or a network peer send arbitrary frames to the adapter, crash Home Assistant or ZHA, or read data they should not. Include your Home Assistant version, the integration version and the ZBT-2 firmware version.

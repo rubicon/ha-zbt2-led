@@ -32,10 +32,16 @@ updates:
       include: "scope"
     groups:
       # pytest-homeassistant-custom-component pins an exact Home Assistant
-      # release, and zha must match the version that release's ZHA manifest
-      # requires, so the two move in one PR. If the grouped bump still fails,
-      # zha needs the version from the new release's ZHA manifest.
+      # release. zha and the rest are the requirements of ZHA and of the
+      # components ZHA depends on, which must match that release's manifests,
+      # so they all move in one PR. If the grouped bump still fails, take the
+      # versions from the new release's manifests.
       home-assistant:
         patterns:
           - "pytest-homeassistant-custom-component"
           - "zha"
+          - "zha-quirks"
+          - "aiousbwatcher"
+          - "ha-silabs-firmware-client"
+          - "serialx"
+          - "universal-silabs-flasher"
