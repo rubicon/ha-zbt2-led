@@ -463,6 +463,9 @@ async def test_reload_while_off_and_untouched_stays_hands_off(
 
 
 @pytest.mark.parametrize(
+    "old_gateway_lingers", [False, True], ids=["old-gateway-freed", "old-gateway-alive"]
+)
+@pytest.mark.parametrize(
     "zha_back_first", [True, False], ids=["zha-back-first", "zha-down-at-setup"]
 )
 async def test_zha_restart_while_unloaded_is_an_adapter_reset(
@@ -471,8 +474,14 @@ async def test_zha_restart_while_unloaded_is_an_adapter_reset(
     zha_running: MockConfigEntry,
     ncp: FakeZbt2Ncp,
     zha_back_first: bool,
+    old_gateway_lingers: bool,
 ) -> None:
-    """A ZHA restart this integration did not see still leaves an off LED alone."""
+    """A ZHA restart this integration did not see still leaves an off LED alone.
+
+    The old gateway may outlive the restart (anything still holding it keeps it
+    alive), so the new run is told apart by identity, not only by the old one
+    being gone.
+    """
     await setup_entry(hass, config_entry)
     await turn_on_red(hass)
     await hass.services.async_call(
@@ -482,6 +491,9 @@ async def test_zha_restart_while_unloaded_is_an_adapter_reset(
     assert ncp.colors == [RED, (0, 0, 0)]
     await unload(hass, config_entry)
 
+    old_gateway = (
+        get_zha_data(hass).gateway_proxy.gateway if old_gateway_lingers else None
+    )
     stop_zha(hass, zha_running)
     fresh = FakeZbt2Ncp()
     if zha_back_first:
@@ -494,6 +506,7 @@ async def test_zha_restart_while_unloaded_is_an_adapter_reset(
 
     assert fresh.frames == []
     assert hass.states.get(ENTITY_ID).state == STATE_OFF
+    del old_gateway
     await unload(hass, config_entry)
 
 

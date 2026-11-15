@@ -388,13 +388,16 @@ async def test_zha_run_identifies_each_zha_start(
     """The same run gives the same gateway; a ZHA restart gives a new one."""
     start_zha(hass, zha_entry, ncp)
     first = zha_link.zha_run(hass)
+    old_gateway = first()
 
-    assert first() is not None
-    assert zha_link.zha_run(hass)() is first()
+    assert old_gateway is not None
+    assert zha_link.zha_run(hass)() is old_gateway
 
     start_zha(hass, zha_entry, ncp)
 
-    assert zha_link.zha_run(hass)() is not first()
+    # The old gateway is still alive here, so only identity tells them apart.
+    assert first() is old_gateway
+    assert zha_link.zha_run(hass)() is not old_gateway
 
 
 async def test_zha_run_without_weak_references_is_always_new(
