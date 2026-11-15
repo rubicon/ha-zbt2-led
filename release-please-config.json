@@ -19,7 +19,7 @@
     ".": {
       "release-type": "simple",
       "package-name": "ha-zbt2-led",
-      "release-as": "0.1.0",
+      "initial-version": "0.1.0",
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
         {
