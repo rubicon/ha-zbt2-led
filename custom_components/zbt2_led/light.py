@@ -11,6 +11,7 @@ from homeassistant.components.light import (
     ATTR_EFFECT,
     ATTR_FLASH,
     ATTR_RGB_COLOR,
+    EFFECT_OFF,
     ColorMode,
     LightEntity,
     LightEntityFeature,
@@ -98,7 +99,7 @@ class Zbt2LedLight(LightEntity, RestoreEntity):
     _attr_color_mode = ColorMode.RGB
     _attr_supported_color_modes = {ColorMode.RGB}
     _attr_supported_features = LightEntityFeature.EFFECT | LightEntityFeature.FLASH
-    _attr_effect_list = EFFECTS
+    _attr_effect_list = [*EFFECTS, EFFECT_OFF]
     _attr_is_on = False
 
     def __init__(self, entry: Zbt2LedConfigEntry) -> None:
@@ -177,6 +178,10 @@ class Zbt2LedLight(LightEntity, RestoreEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on, or flash, the LED."""
         effect = kwargs.get(ATTR_EFFECT, self._effect)
+        if effect == EFFECT_OFF:
+            # Home Assistant's "no effect". Callers such as Signal Lights Plus
+            # send it to stop an effect, and only to lights that list it.
+            effect = EFFECT_SOLID
         if effect not in EFFECTS:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,

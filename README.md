@@ -67,6 +67,18 @@ data:
 
 Changing only the colour or brightness keeps the effect that is running.
 
+To stop an effect, use the effect `off`, Home Assistant's name for no effect. The light shows its colour steadily again and reports `Solid`. Signal Lights Plus uses this to end an effect when a signal without one takes over.
+
+```yaml
+action: light.turn_on
+target:
+  entity_id: light.zbt2_led
+data:
+  effect: "off"
+```
+
+Keep the quotes around `"off"` in YAML. Without them YAML reads `off` as the value false, and the light rejects it.
+
 ### Flash
 
 `flash: short` blinks once and `flash: long` blinks ten times. Afterwards the light goes back to exactly what it was showing, and its on/off state does not change, which makes flash useful as an alert. If you pass a colour with the flash, the flash uses that colour; otherwise it uses the light's own colour.
