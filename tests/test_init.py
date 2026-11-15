@@ -13,6 +13,7 @@ from homeassistant.components.light import (
 from homeassistant.components.zha.helpers import get_zha_data
 from homeassistant.config_entries import (
     SIGNAL_CONFIG_ENTRY_CHANGED,
+    SOURCE_IGNORE,
     ConfigEntryChange,
     ConfigEntryState,
 )
@@ -46,6 +47,7 @@ from .conftest import (
     ENTITY_ID,
     SLACK,
     STEP,
+    ZBT2_PATH,
     advance,
     setup_entry,
     start_zha,
@@ -649,3 +651,75 @@ async def test_zha_entry_added_while_loaded_changes_nothing(
     assert ncp.frames == [bytes.fromhex("000f00ff0000")]
     assert config_entry.state is ConfigEntryState.LOADED
     await unload(hass, config_entry)
+
+
+def ignored_zha(hass: HomeAssistant, data: dict) -> MockConfigEntry:
+    """Add an ignored ZHA discovery, the way Home Assistant stores one."""
+    entry = MockConfigEntry(domain="zha", source=SOURCE_IGNORE, data=data)
+    entry.add_to_hass(hass)
+    return entry
+
+
+async def test_ignored_zha_discovery_does_not_take_the_place_of_zha(
+    hass: HomeAssistant, config_entry: MockConfigEntry, ncp: FakeZbt2Ncp
+) -> None:
+    """Ignoring a ZHA discovery while the light waits for ZHA changes nothing."""
+    assert not await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    ignored = ignored_zha(hass, {})
+    async_dispatcher_send(
+        hass, SIGNAL_CONFIG_ENTRY_CHANGED, ConfigEntryChange.ADDED, ignored
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert config_entry.state is ConfigEntryState.SETUP_RETRY
+
+    zha = MockConfigEntry(domain="zha", data={"device": {"path": ZBT2_PATH}})
+    zha.add_to_hass(hass)
+    async_dispatcher_send(
+        hass, SIGNAL_CONFIG_ENTRY_CHANGED, ConfigEntryChange.ADDED, zha
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+    start_zha(hass, zha, ncp)
+    await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.LOADED
+    assert hass.states.get(ENTITY_ID).state == STATE_OFF
+    await unload(hass, config_entry)
+    stop_zha(hass, zha)
+
+
+async def test_ignored_zha_entry_with_the_zbt2_path_is_not_followed(
+    hass: HomeAssistant,
+    config_entry: MockConfigEntry,
+    ncp: FakeZbt2Ncp,
+) -> None:
+    """An ignored entry listed first, even on the ZBT-2's path, is skipped."""
+    ignored_zha(hass, {"device": {"path": ZBT2_PATH}})
+    zha = MockConfigEntry(domain="zha", data={"device": {"path": ZBT2_PATH}})
+    zha.add_to_hass(hass)
+    start_zha(hass, zha, ncp)
+
+    await setup_entry(hass, config_entry)
+
+    assert hass.states.get(ENTITY_ID).state == STATE_OFF
+    await unload(hass, config_entry)
+    stop_zha(hass, zha)
+
+
+async def test_zha_on_another_zbt2_port_is_not_followed(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> None:
+    """A tty path recorded by a different ZBT-2's hardware entry is not this one."""
+    MockConfigEntry(
+        domain="homeassistant_connect_zbt2",
+        data={"device": "/dev/ttyACM0", "serial_number": "FEDCBA987654"},
+    ).add_to_hass(hass)
+    MockConfigEntry(
+        domain="zha", data={"device": {"path": "/dev/ttyACM0"}}
+    ).add_to_hass(hass)
+
+    assert not await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.SETUP_RETRY

@@ -17,7 +17,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.typing import ConfigType
 
 from . import zha_link
-from .const import CONF_SERIAL_NUMBER, DOMAIN, ZHA_DOMAIN
+from .const import CONF_SERIAL_NUMBER, DOMAIN, ZBT2_HARDWARE_DOMAIN, ZHA_DOMAIN
 from .controller import LedController, async_forget
 from .zha_link import LinkIncompatible
 
@@ -46,15 +46,42 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
+def zha_config_entries(hass: HomeAssistant) -> list[ConfigEntry]:
+    """Return ZHA's config entries, leaving out ignored discoveries."""
+    return hass.config_entries.async_entries(ZHA_DOMAIN, include_ignore=False)
+
+
+def zha_radio_path(zha_entry: ConfigEntry) -> str:
+    """Return the serial port path ZHA's config entry uses for its radio."""
+    return str(zha_entry.data.get("device", {}).get("path", ""))
+
+
+def is_zbt2_path(hass: HomeAssistant, serial: str, path: str) -> bool:
+    """Return True when path is the port of the ZBT-2 with this serial number.
+
+    A /dev/serial/by-id path carries the serial number. Any other path, such as
+    /dev/ttyACM0, counts only when it is the port the ZBT-2's hardware entry
+    records.
+    """
+    if serial in path:
+        return True
+    return any(
+        hardware.data.get("serial_number") == serial
+        and hardware.data.get("device") == path
+        for hardware in hass.config_entries.async_entries(ZBT2_HARDWARE_DOMAIN)
+    )
+
+
 def find_zha_entry(hass: HomeAssistant, serial: str) -> ConfigEntry | None:
     """Return the ZHA config entry for the ZBT-2 with this serial number."""
-    entries = hass.config_entries.async_entries(ZHA_DOMAIN)
-    for entry in entries:
-        if serial in str(entry.data.get("device", {}).get("path", "")):
-            return entry
-    # ZHA runs one radio, so a lone entry is the ZBT-2 even when its path is a
-    # /dev/ttyACM name rather than the by-id path that carries the serial.
-    return entries[0] if len(entries) == 1 else None
+    return next(
+        (
+            zha_entry
+            for zha_entry in zha_config_entries(hass)
+            if is_zbt2_path(hass, serial, zha_radio_path(zha_entry))
+        ),
+        None,
+    )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: Zbt2LedConfigEntry) -> bool:

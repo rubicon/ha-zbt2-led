@@ -24,7 +24,7 @@ from homeassistant.helpers.selector import (
 )
 import voluptuous as vol
 
-from . import find_zha_entry, zha_link
+from . import is_zbt2_path, zha_config_entries, zha_link, zha_radio_path
 from .const import (
     CONF_IDLE_BEHAVIOR,
     CONF_MAX_BRIGHTNESS,
@@ -36,7 +36,6 @@ from .const import (
     SECTION_BEHAVIOR,
     SECTION_BRIGHTNESS,
     ZBT2_HARDWARE_DOMAIN,
-    ZHA_DOMAIN,
 )
 from .zha_link import LinkIncompatible, ZhaNotReady
 
@@ -51,12 +50,18 @@ def default_options() -> dict[str, Any]:
     }
 
 
-def find_zbt2_serial(hass: HomeAssistant, zha_path: str) -> str | None:
-    """Return the serial number of the ZBT-2 that ZHA's radio path points at."""
-    for entry in hass.config_entries.async_entries(ZBT2_HARDWARE_DOMAIN):
-        serial = str(entry.data.get("serial_number", ""))
-        if serial and (entry.data.get("device") == zha_path or serial in zha_path):
-            return serial
+def find_zbt2_behind_zha(hass: HomeAssistant) -> tuple[ConfigEntry, str] | None:
+    """Return ZHA's config entry for a ZBT-2, and the ZBT-2's serial number."""
+    serials = [
+        serial
+        for hardware in hass.config_entries.async_entries(ZBT2_HARDWARE_DOMAIN)
+        if (serial := str(hardware.data.get("serial_number", "")))
+    ]
+    for zha_entry in zha_config_entries(hass):
+        path = zha_radio_path(zha_entry)
+        for serial in serials:
+            if is_zbt2_path(hass, serial, path):
+                return zha_entry, serial
     return None
 
 
@@ -93,22 +98,16 @@ class Zbt2LedConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Find the ZBT-2 behind ZHA and confirm."""
-        if not (zha_entries := self.hass.config_entries.async_entries(ZHA_DOMAIN)):
+        if not zha_config_entries(self.hass):
             return self.async_abort(reason="zha_not_set_up")
-        serial = None
-        for zha_entry in zha_entries:
-            path = str(zha_entry.data.get("device", {}).get("path", ""))
-            if (serial := find_zbt2_serial(self.hass, path)) is not None:
-                break
-        if serial is None:
+        if (found := find_zbt2_behind_zha(self.hass)) is None:
             return self.async_abort(reason="no_zbt2")
+        zha_entry, serial = found
         await self.async_set_unique_id(serial)
         self._abort_if_unique_id_configured()
 
         errors: dict[str, str] = {}
         if user_input is not None:
-            zha_entry = find_zha_entry(self.hass, serial)
-            assert zha_entry is not None
             if (error := await async_check_led(self.hass, zha_entry)) is None:
                 return self.async_create_entry(
                     title=TITLE,

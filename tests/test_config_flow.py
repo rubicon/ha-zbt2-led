@@ -6,7 +6,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from homeassistant.components.zha.helpers import get_zha_data
-from homeassistant.config_entries import SOURCE_USER, ConfigEntryState
+from homeassistant.config_entries import SOURCE_IGNORE, SOURCE_USER, ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 import pytest
@@ -58,8 +58,8 @@ async def test_adds_the_zbt2(hass: HomeAssistant) -> None:
 async def test_adds_the_zbt2_on_a_tty_path(hass: HomeAssistant) -> None:
     """ZHA set up on /dev/ttyACM0 is matched to the ZBT-2 by its device path.
 
-    The path carries no serial number, so the flow matches the hardware entry's
-    device path, and setup takes ZHA's only entry as the ZBT-2's.
+    The path carries no serial number, so the flow and setup both match it to
+    the hardware entry's device path.
     """
     tty = "/dev/ttyACM0"
     MockConfigEntry(
@@ -81,6 +81,57 @@ async def test_adds_the_zbt2_on_a_tty_path(hass: HomeAssistant) -> None:
     assert result["result"].state is ConfigEntryState.LOADED
     await hass.config_entries.async_unload(result["result"].entry_id)
     get_zha_data(hass).gateway_proxy = None
+
+
+async def test_ignored_zha_discovery_does_not_block_adding(
+    hass: HomeAssistant,
+) -> None:
+    """An ignored ZHA discovery next to the real ZHA entry is not a candidate."""
+    tty = "/dev/ttyACM0"
+    MockConfigEntry(
+        domain=ZBT2_HW_DOMAIN,
+        unique_id=SERIAL,
+        data={"device": tty, "serial_number": SERIAL},
+    ).add_to_hass(hass)
+    MockConfigEntry(domain="zha", source=SOURCE_IGNORE, data={}).add_to_hass(hass)
+    zha_entry = MockConfigEntry(
+        domain="zha", data={"device": {"path": tty}, "radio_type": "ezsp"}
+    )
+    zha_entry.add_to_hass(hass)
+    start_zha(hass, zha_entry, FakeZbt2Ncp())
+
+    result = await start_flow(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["result"].state is ConfigEntryState.LOADED
+    await hass.config_entries.async_unload(result["result"].entry_id)
+    get_zha_data(hass).gateway_proxy = None
+
+
+async def test_only_an_ignored_zha_entry_is_no_zha(hass: HomeAssistant) -> None:
+    """An ignored ZHA discovery is not a ZHA setup."""
+    MockConfigEntry(domain="zha", source=SOURCE_IGNORE, data={}).add_to_hass(hass)
+
+    result = await start_flow(hass)
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "zha_not_set_up"
+
+
+@pytest.mark.usefixtures("zha_running")
+async def test_hardware_entry_without_serial_matches_nothing(
+    hass: HomeAssistant,
+) -> None:
+    """A hardware entry with no serial number cannot claim ZHA's radio."""
+    MockConfigEntry(domain=ZBT2_HW_DOMAIN, data={"device": "/dev/other"}).add_to_hass(
+        hass
+    )
+
+    result = await start_flow(hass)
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "no_zbt2"
 
 
 async def test_aborts_without_zha(hass: HomeAssistant) -> None:
