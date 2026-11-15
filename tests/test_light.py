@@ -11,6 +11,7 @@ from homeassistant.components.light import (
     ATTR_RGB_COLOR,
     ATTR_SUPPORTED_COLOR_MODES,
     DOMAIN as LIGHT_DOMAIN,
+    EFFECT_OFF,
     FLASH_LONG,
     FLASH_SHORT,
     ColorMode,
@@ -37,6 +38,7 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.zbt2_led.const import (
     DOMAIN,
     EFFECT_BLINK,
+    EFFECT_BREATHE,
     EFFECT_PULSE,
     EFFECT_SOLID,
     EFFECTS,
@@ -119,7 +121,7 @@ async def test_light_is_created_off_and_registered(
     assert state is not None
     assert state.state == STATE_OFF
     assert state.attributes[ATTR_SUPPORTED_COLOR_MODES] == [ColorMode.RGB]
-    assert state.attributes[ATTR_EFFECT_LIST] == EFFECTS
+    assert state.attributes[ATTR_EFFECT_LIST] == [*EFFECTS, EFFECT_OFF]
     assert state.attributes[ATTR_SUPPORTED_FEATURES] == (
         LightEntityFeature.EFFECT | LightEntityFeature.FLASH
     )
@@ -195,6 +197,48 @@ async def test_colour_change_keeps_the_effect(
 
     assert hass.states.get(ENTITY_ID).attributes[ATTR_EFFECT] == EFFECT_PULSE
     assert ncp.last_color == GREEN
+
+
+@pytest.mark.usefixtures("loaded_entry")
+@pytest.mark.parametrize("running", [EFFECT_BLINK, EFFECT_PULSE, EFFECT_BREATHE])
+async def test_off_effect_ends_a_running_effect(
+    hass: HomeAssistant, ncp: FakeZbt2Ncp, running: str
+) -> None:
+    """The core effect "off" replaces a running effect with a steady colour."""
+    await turn_on(
+        hass,
+        **{ATTR_RGB_COLOR: GREEN, ATTR_BRIGHTNESS: 128, ATTR_EFFECT: running},
+    )
+    await advance(hass, STEP)
+    await turn_on(hass, **{ATTR_EFFECT: EFFECT_OFF})
+    await advance(hass, STEP)
+    sent = len(ncp.colors)
+    await advance(hass, STEP)
+    await advance(hass, STEP)
+
+    state = hass.states.get(ENTITY_ID)
+    assert state.state == STATE_ON
+    assert state.attributes[ATTR_EFFECT] == EFFECT_SOLID
+    assert state.attributes[ATTR_RGB_COLOR] == GREEN
+    assert state.attributes[ATTR_BRIGHTNESS] == 128
+    assert ncp.colors[sent:] == []
+    assert ncp.colors[sent - 1] == (0, 128, 0)
+
+
+@pytest.mark.usefixtures("loaded_entry")
+async def test_a_colour_after_off_stays_steady(
+    hass: HomeAssistant, ncp: FakeZbt2Ncp
+) -> None:
+    """After "off", a colour-only change keeps the steady effect, not the old one."""
+    await turn_on(hass, **{ATTR_RGB_COLOR: RED, ATTR_EFFECT: EFFECT_BLINK})
+    await turn_on(hass, **{ATTR_EFFECT: EFFECT_OFF})
+    await turn_on(hass, **{ATTR_RGB_COLOR: GREEN})
+    await advance(hass, STEP)
+    await advance(hass, STEP)
+
+    assert hass.states.get(ENTITY_ID).attributes[ATTR_EFFECT] == EFFECT_SOLID
+    assert ncp.last_color == GREEN
+    assert BLACK not in ncp.colors[-2:]
 
 
 @pytest.mark.usefixtures("loaded_entry")
