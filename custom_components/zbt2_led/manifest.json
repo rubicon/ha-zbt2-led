@@ -1,0 +1,11 @@
+{
+  "domain": "zbt2_led",
+  "name": "ZBT-2 LED",
+  "codeowners": ["@rubicon"],
+  "documentation": "https://github.com/rubicon/ha-zbt2-led",
+  "integration_type": "device",
+  "iot_class": "assumed_state",
+  "issue_tracker": "https://github.com/rubicon/ha-zbt2-led/issues",
+  "requirements": [],
+  "version": "0.0.0"
+}

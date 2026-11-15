@@ -1,0 +1,9 @@
+{
+  "name": "ha-zbt2-led-tooling",
+  "private": true,
+  "description": "Commit lint tooling for CI. The integration itself has no Node dependencies.",
+  "devDependencies": {
+    "@commitlint/cli": "19.8.1",
+    "@commitlint/config-conventional": "19.8.1"
+  }
+}

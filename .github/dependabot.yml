@@ -1,0 +1,41 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      commitlint:
+        patterns:
+          - "@commitlint/*"
+
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "build"
+      include: "scope"
+    groups:
+      # pytest-homeassistant-custom-component pins an exact Home Assistant
+      # release, and zha must match the version that release's ZHA manifest
+      # requires, so the two move in one PR. If the grouped bump still fails,
+      # zha needs the version from the new release's ZHA manifest.
+      home-assistant:
+        patterns:
+          - "pytest-homeassistant-custom-component"
+          - "zha"

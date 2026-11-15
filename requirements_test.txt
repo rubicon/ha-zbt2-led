@@ -1,0 +1,7 @@
+# Test and lint toolchain. pytest-homeassistant-custom-component pins the
+# Home Assistant release the suite runs against; zha must match the version
+# that release's ZHA manifest requires.
+pytest-homeassistant-custom-component==0.13.375
+zha==2.3.1
+ruff==0.17.5
+black==26.10.1
