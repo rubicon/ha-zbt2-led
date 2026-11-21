@@ -3,7 +3,7 @@
   "private": true,
   "description": "Commit lint tooling for CI. The integration itself has no Node dependencies.",
   "devDependencies": {
-    "@commitlint/cli": "19.8.1",
-    "@commitlint/config-conventional": "19.8.1"
+    "@commitlint/cli": "21.2.4",
+    "@commitlint/config-conventional": "21.2.4"
   }
 }
